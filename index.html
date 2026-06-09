@@ -263,19 +263,16 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
     <div class="card-title">🩷 배정 옵션</div>
     <div class="flex gap-12" style="flex-wrap:wrap;align-items:flex-end;">
       <div>
-        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">배분 방식</label>
-        <select id="optBalance">
-          <option value="round-robin">균등 분배 (순환)</option>
-          <option value="fill-first">슬롯 채우기 우선</option>
-        </select>
-      </div>
-      <div>
         <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">정렬 순서</label>
         <select id="optOrder">
           <option value="class">반 순서 (A→X→I→O→M→K→N→D→S)</option>
           <option value="name">이름 순</option>
           <option value="id">학번 순</option>
         </select>
+      </div>
+      <div style="font-size:12px;color:var(--muted);max-width:320px;line-height:1.5;">
+        ※ 시간충돌 없는 슬롯 중 가장 이른 시간 우선 배정<br>
+        ※ 충돌 없는 슬롯이 없으면 그 학생은 미배정으로 남김
       </div>
     </div>
     <div class="mt-16 flex gap-8">
@@ -1059,32 +1056,36 @@ function _runAssign(){
   else sorted.sort((a,b)=>String(a[1].sid).localeCompare(String(b[1].sid)));
 
   const usedSlots=new Set();
-  const balance=document.getElementById('optBalance').value;
   let doneN=0,failN=0;
+  const failList=[];
+
+  // 전체 슬롯을 이른 날짜·시간 순으로 정렬 (한 번만)
+  const sortedAllSlots = [...allSlots].sort((a,b) =>
+    a.date.localeCompare(b.date) || a.st.localeCompare(b.st)
+  );
 
   for(const[idx,student] of sorted){
-    let cands=allSlots.filter(s=>!usedSlots.has(s.tid));
-    if(!cands.length){failN++;log(`✕ ${student.name} — 슬롯 부족`,'err');continue;}
-    if(balance==='round-robin'){
-      const cnt={};
-      consultants.forEach(c=>{cnt[c.id]=Object.values(assignments).filter(a=>a.consultantId===c.id).length;});
-      cands.sort((a,b)=>cnt[a.cid]-cnt[b.cid]||(new Date(a.date)-new Date(b.date)));
-    } else {
-      cands.sort((a,b)=>new Date(a.date)-new Date(b.date));
-    }
     let ok=false;
-    for(const slot of cands){
-      if(!isConflict(student.busy,slot.date,slot.st,slot.et)){
+    // 사용 안 된 슬롯 중에서 시간충돌 없는 가장 이른 슬롯에 배정
+    for(const slot of sortedAllSlots){
+      if(usedSlots.has(slot.tid))continue;
+      if(!isConflict(student.busy||[],slot.date,slot.st,slot.et)){
         assignments[idx]={consultantId:slot.cid,consultantName:slot.cname,dateId:slot.did,timeId:slot.tid,date:slot.date,startTime:slot.st,endTime:slot.et};
         usedSlots.add(slot.tid);doneN++;ok=true;break;
       }
     }
-    if(!ok){failN++;log(`⚠ ${student.name}(${student.classCode}) — 수업 충돌로 배정 불가`,'warn');}
+    if(!ok){
+      failN++;
+      failList.push(student);
+    }
   }
 
   save();updateStats();renderSlots();
   log(`🩷 완료: ${doneN}명 배정`,'ok');
-  if(failN>0)log(`⚠ 미배정: ${failN}명`,'warn');
+  if(failN>0){
+    log(`⚠ 미배정: ${failN}명 (수업 충돌로 가능한 슬롯 없음)`,'warn');
+    failList.forEach(s=>log(`  · ${s.name} (${s.sid}, ${s.classCode||'-'})`,'warn'));
+  }
   consultants.forEach(c=>{
     const n=Object.values(assignments).filter(a=>a.consultantId===c.id).length;
     log(`  ${c.name}: ${n}명`,'ok');
