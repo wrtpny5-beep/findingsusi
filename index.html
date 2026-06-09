@@ -349,7 +349,14 @@ const SCHEDULE = {"탐구A_사회문화(●)":{"day":"수","periods":[1,2,3]},"�
 
 const PERIOD_TIME={1:{s:8*60,e:8*60+50},2:{s:9*60,e:9*60+50},3:{s:10*60,e:10*60+50},4:{s:11*60,e:11*60+50},5:{s:13*60+10,e:14*60},6:{s:14*60+10,e:15*60},7:{s:15*60+10,e:16*60},8:{s:16*60+10,e:17*60},9:{s:17*60+10,e:18*60},10:{s:19*60+10,e:20*60},11:{s:20*60+10,e:21*60},12:{s:21*60+10,e:22*60}};
 const CLASS_ORDER=['A','X','I','O','M','K','N','D','S'];
-const SUBJ_COLS=[['탐구1','그룹명','조합'],['탐구2','그룹명.1','조합.1'],['국어선택','그룹명.2','조합.2'],['수학선택','그룹명.3','조합.3'],['영어선택','그룹명.4','조합.4'],['논술','그룹명.5','조합.5'],['독서','그룹명.6','조합.6'],['문학','그룹명.7','조합.7'],['수학Ⅰ','그룹명.8','조합.8'],['수학Ⅱ','그룹명.9','조합.9'],['한국사','그룹명.10','조합.10'],['자율선택1','그룹명.11','조합.11'],['자율선택2','그룹명.12','조합.12'],['자율선택3','그룹명.13','조합.13'],['자율선택4','그룹명.14','조합.14'],['자율선택5','그룹명.15','조합.15'],['과탐테마','그룹명.16','조합.16']];
+// 시간표 추출 시 "과목 컬럼 다음 두 칸이 그룹명/조합"이라는 패턴으로 매칭하기 위한 과목 헤더 집합
+// 마스터에 새 과목 컬럼이 추가되어도 (예: 자율선택3-1, 영상수업) 여기에만 등록하면 자동 적용
+const SUBJECT_HEADERS = new Set([
+  '탐구1','탐구2','국어선택','수학선택','영어선택','논술','독서','문학',
+  '수학Ⅰ','수학Ⅱ','한국사',
+  '자율선택1','자율선택2','자율선택2-1','자율선택3','자율선택3-1','자율선택4','자율선택5',
+  '과탐테마','영상수업'
+]);
 const SKIP_COMBOS=new Set(['(자습)','(영상)','(사문영상)','(야간)','반수','']);
 
 // ============================================================
@@ -464,20 +471,19 @@ function uuid(){return Math.random().toString(36).substr(2,9);}
 function getClassCode(반,그룹){return 반&&그룹?String(반).trim()+String(그룹).trim():String(반||'').trim();}
 function getMM(classCode){return MM_TABLE[classCode]||{t:'',m:'?'};}
 
-function buildBusy(row){
+// buildBusy: master.subjects([{subj,group,combo}, ...])로부터 시간 블록 생성
+function buildBusy(master){
   const blocks=[];
-  for(const[sc,gc,cc] of SUBJ_COLS){
-    let subj=String(row[sc]||'').trim();
-    let group=String(row[gc]||'').trim();
-    let combo=String(row[cc]||'').trim();
-    if(!subj||subj==='undefined'||!group||!combo)continue;
-    combo=combo.replace('(Live)','').trim();
-    if(SKIP_COMBOS.has(combo)||combo.startsWith('('))continue;
-    if(subj.includes('자습'))continue;
-    const gs=group.split(',').map(x=>x.trim());
-    const ss=subj.split(',').map(x=>x.trim());
+  if(!master || !Array.isArray(master.subjects)) return blocks;
+  for(const{subj, group, combo} of master.subjects){
+    if(!subj || !group || !combo) continue;
+    const realCombo = String(combo).replace('(Live)','').trim();
+    if(SKIP_COMBOS.has(realCombo) || realCombo.startsWith('(')) continue;
+    if(String(subj).includes('자습')) continue;
+    const gs=String(group).split(',').map(x=>x.trim());
+    const ss=String(subj).split(',').map(x=>x.trim());
     for(let i=0;i<gs.length;i++){
-      const code=norm(`${gs[i]}_${ss[i]||ss[0]}(${combo})`);
+      const code=norm(`${gs[i]}_${ss[i]||ss[0]}(${realCombo})`);
       const sched=SCHEDULE[code];
       if(!sched)continue;
       const ps=sched.periods;
@@ -523,24 +529,60 @@ function readXLSX(file,cb){
 function loadMaster(file){
   readXLSX(file,wb=>{
     const ws=wb.Sheets[wb.SheetNames[0]];
-    const data=XLSX.utils.sheet_to_json(ws);
+    // raw 2D array로 읽기 (중복 헤더 문제 회피)
+    const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
     masterMap={};
 
-    // 마스터 row 슬림화: 시간표 추출·마이맥반 매핑에 필요한 컬럼만 추출
-    // 117 컬럼 → 약 55 컬럼 (localStorage 용량 절감)
-    const KEEP_BASE = ['학번','반','그룹','성명'];
-    const KEEP_SUBJ = [];
-    SUBJ_COLS.forEach(([s,g,c])=>{ KEEP_SUBJ.push(s,g,c); });
-    const KEEP = new Set([...KEEP_BASE, ...KEEP_SUBJ]);
+    if(!rows.length){
+      alert('마스터 파일에 데이터가 없습니다.');
+      return;
+    }
+    const headers = rows[0].map(h => String(h||'').trim());
 
-    data.forEach(row=>{
-      const sid=String(row['학번']||'').trim();
-      if(!sid)return;
-      const slim={};
-      for(const k of Object.keys(row)){
-        if(KEEP.has(k)) slim[k]=row[k];
+    // 필수 컬럼 인덱스
+    const idx = {
+      sid:   headers.indexOf('학번'),
+      ban:   headers.indexOf('반'),
+      group: headers.indexOf('그룹'),
+      name:  headers.indexOf('성명')
+    };
+    if(idx.sid < 0){
+      alert('마스터 파일에 "학번" 컬럼이 없습니다.');
+      return;
+    }
+
+    // 과목 컬럼 위치 찾기: 헤더가 SUBJECT_HEADERS에 있고, 다음 두 칸이 정확히 '그룹명'/'조합'일 때만 인정
+    // (마스터의 백분위 영역 등에 '탐구1','탐구2' 같은 헤더가 중복 등장하는 경우 false positive 방지)
+    const subjectColPositions = [];
+    for(let c=0; c<headers.length; c++){
+      if(SUBJECT_HEADERS.has(headers[c]) && headers[c+1]==='그룹명' && headers[c+2]==='조합'){
+        subjectColPositions.push({subj:c, group:c+1, combo:c+2});
       }
-      masterMap[sid]=slim;
+    }
+
+    let badSubject = 0;
+    rows.slice(1).forEach(row=>{
+      if(!row || !row.length) return;
+      const sid = String(row[idx.sid]||'').trim();
+      if(!sid) return;
+
+      // 과목 데이터 추출
+      const subjects = [];
+      for(const {subj, group, combo} of subjectColPositions){
+        const s = String(row[subj]||'').trim();
+        const g = String(row[group]||'').trim();
+        const c = String(row[combo]||'').trim();
+        if(s && g && c) subjects.push({subj:s, group:g, combo:c});
+        else if(s && (!g || !c)) badSubject++; // 과목명은 있는데 그룹/조합이 빈 경우 (참고용)
+      }
+
+      masterMap[sid] = {
+        학번: sid,
+        반: String(row[idx.ban]||'').trim(),
+        그룹: String(row[idx.group]||'').trim(),
+        성명: String(row[idx.name]||'').trim(),
+        subjects
+      };
     });
 
     // 사후 보강: 기존 targetList에서 매칭 안 됐던 학생(마이맥반='?' 또는 busy 빈 배열)을
@@ -549,14 +591,18 @@ function loadMaster(file){
     targetList.forEach(s => {
       const master = masterMap[s.sid];
       if(!master) return;
-      const 반 = String(master['반']||'').trim();
-      const 그룹 = String(master['그룹']||'').trim();
-      const classCode = getClassCode(반, 그룹);
+      const classCode = getClassCode(master['반'], master['그룹']);
       const newBusy = buildBusy(master);
       if(!s.classCode || s.maymac === '?' || !s.busy || s.busy.length === 0){
         s.classCode = classCode;
         s.maymac = getMM(classCode).m;
         s.busy = newBusy;
+        backfilled++;
+      } else if(newBusy.length > (s.busy?.length||0)){
+        // 새 buildBusy가 더 많은 시간 블록을 찾았다면 갱신 (이전 버그 영향 받은 데이터 보강)
+        s.busy = newBusy;
+        s.classCode = classCode;
+        s.maymac = getMM(classCode).m;
         backfilled++;
       }
     });
@@ -565,8 +611,11 @@ function loadMaster(file){
     renderStudentTable();
     if(typeof renderResult === 'function') renderResult();
     const cnt = Object.keys(masterMap).length;
+    const sampleSubj = Object.values(masterMap).find(m=>m.subjects.length>0);
+    const subjCnt = sampleSubj ? sampleSubj.subjects.length : 0;
     const backfillMsg = backfilled ? ` <span class="pill pill-ok" style="margin-left:6px">↻ ${backfilled}명 정보 보강</span>` : '';
-    document.getElementById('res-master').innerHTML=`<span class="pill pill-ok">🩷 ${cnt}명 로드</span>${backfillMsg}`;
+    const subjMsg = ` <span class="pill" style="margin-left:6px;background:#eef;color:#557;">학생당 평균 ${subjCnt}과목</span>`;
+    document.getElementById('res-master').innerHTML=`<span class="pill pill-ok">🩷 ${cnt}명 로드</span>${subjMsg}${backfillMsg}`;
     document.getElementById('zone-master').classList.add('done');
     updateHeader();
   });
