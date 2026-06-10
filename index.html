@@ -148,6 +148,18 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
 .btn-restore{background:#fff;color:var(--dark);border:1px solid var(--lavender);padding:9px 16px;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;}
 .btn-restore:hover{background:var(--periwinkle);}
 
+/* 토스트 */
+.toast{position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 22px;border-radius:10px;z-index:1000;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(-4px);}
+
+/* 미니 복사 버튼 (학생 행) */
+.btn-copy-sm{background:#fff;color:var(--purple-deep);border:1px solid var(--lavender);padding:4px 8px;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;margin-right:4px;}
+.btn-copy-sm:hover{background:var(--lavender);color:#fff;}
+
+/* 날짜 헤더 명단 복사 버튼 */
+.btn-copy-list{background:#fff;color:var(--purple-deep);border:1px solid var(--lavender);padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;margin-right:8px;white-space:nowrap;}
+.btn-copy-list:hover{background:var(--lavender);color:#fff;}
+
 /* 위험 영역: 전체 초기화 */
 .danger-zone{margin-top:24px;background:#fff5f5;border:1px solid #f5c6c6;border-radius:14px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:18px;}
 .danger-zone .danger-info{flex:1;}
@@ -297,7 +309,7 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
       <option value="done">배정 완료</option>
       <option value="none">미배정</option>
     </select>
-    <button class="btn btn-gold" onclick="exportSchedule()">📋 구글시트 클립보드 복사</button>
+    <button class="btn btn-gold" onclick="exportSchedule()">📋 전체 표 복사 (헤더+학생)</button>
     <button class="btn btn-ghost btn-sm" onclick="exportList()">🩷 배정 목록 엑셀</button>
     <button class="btn btn-ghost btn-sm" onclick="previewSampleForm()" style="margin-left:auto;">📄 양식 디자인 미리보기</button>
   </div>
@@ -1167,13 +1179,16 @@ function renderResult(){
               ${unknownN?`<span class="st-unknown" title="시간표 정보 없음 — 검증 불가">? ${unknownN}</span>`:''}
             </span>
           </div>
-          <button class="btn-print-bulk" onclick="printForms([${idxList.join(',')}])">📄 ${date} 전체 양식 출력</button>
+          <div class="flex gap-8">
+            <button class="btn-copy-list" onclick="copyDateList('${date}')">📋 명단 복사</button>
+            <button class="btn-print-bulk" onclick="printForms([${idxList.join(',')}])">📄 ${date} 전체 양식 출력</button>
+          </div>
         </div>
         <table>
           <colgroup>
-            <col style="width:108px"><col style="width:110px"><col style="width:70px"><col style="width:80px"><col style="width:80px"><col><col style="width:110px">
+            <col style="width:108px"><col style="width:110px"><col style="width:70px"><col style="width:80px"><col style="width:80px"><col><col style="width:160px">
           </colgroup>
-          <thead><tr><th>시간</th><th>담당자</th><th>마이맥</th><th>생활반</th><th>학번</th><th>이름</th><th style="text-align:center;">출력</th></tr></thead>
+          <thead><tr><th>시간</th><th>담당자</th><th>마이맥</th><th>생활반</th><th>학번</th><th>이름</th><th style="text-align:center;">동작</th></tr></thead>
           <tbody>${groupRows.map(r=>`<tr class="s-${r.status}">
             <td class="font-mono">${r.a.startTime}~${r.a.endTime}</td>
             <td>${r.a.consultantName}</td>
@@ -1181,7 +1196,10 @@ function renderResult(){
             <td>${r.s.classCode||'-'}</td>
             <td class="font-mono">${r.s.sid}</td>
             <td class="cell-name">${r.s.name}${r.s.formData?'':' <span class="text-muted" style="font-size:11px">⚠ 양식없음</span>'}</td>
-            <td style="text-align:center;"><button class="btn-print" onclick="printForms([${r.idx}])">📄 출력</button></td>
+            <td style="text-align:center;white-space:nowrap;">
+              <button class="btn-copy-sm" onclick="copyStudent(${r.idx})" title="셀 값 복사">📋</button>
+              <button class="btn-print" onclick="printForms([${r.idx}])">📄 출력</button>
+            </td>
           </tr>`).join('')}</tbody>
         </table>
       </div>`;
@@ -1285,6 +1303,65 @@ function copyClipboardText(){
     try{ document.execCommand('copy'); btn.textContent='✓ 복사됨!'; setTimeout(restore, 1500); }
     catch{ alert('자동 복사 실패. 텍스트 영역을 직접 선택해서 복사해주세요.'); restore(); }
   }
+}
+
+// 공통 클립보드 복사 헬퍼
+function copyToClipboard(text){
+  return new Promise((resolve, reject) => {
+    if(navigator.clipboard && window.isSecureContext){
+      navigator.clipboard.writeText(text).then(resolve).catch(()=>fallback());
+    } else {
+      fallback();
+    }
+    function fallback(){
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.cssText = 'position:fixed;top:-1000px;left:0;';
+      document.body.appendChild(ta);
+      ta.select();
+      try{ document.execCommand('copy'); resolve(); }
+      catch(e){ reject(e); }
+      finally{ document.body.removeChild(ta); }
+    }
+  });
+}
+
+// 토스트 메시지
+function showToast(msg){
+  let t = document.getElementById('toast');
+  if(!t){
+    t = document.createElement('div');
+    t.id = 'toast'; t.className = 'toast';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=>t.classList.remove('show'), 1500);
+}
+
+// 학생 1명 셀 값 복사: "H 감효림(5383)"
+function copyStudent(idx){
+  const s = targetList[idx];
+  if(!s)return;
+  const text = `${s.maymac} ${s.name}(${s.sid})`;
+  copyToClipboard(text)
+    .then(()=>showToast(`📋 ${s.name} 복사됨`))
+    .catch(()=>showToast('복사 실패'));
+}
+
+// 날짜별 학생 명단 복사: 시간순으로 셀 값을 줄별 나열
+function copyDateList(date){
+  const rows = Object.entries(assignments)
+    .filter(([,a]) => a.date === date)
+    .map(([i,a]) => ({s: targetList[parseInt(i)], a}))
+    .filter(r => r.s)
+    .sort((a,b) => a.a.startTime.localeCompare(b.a.startTime));
+  if(!rows.length){showToast('해당 날짜에 배정 학생 없음');return;}
+  const text = rows.map(r => `${r.s.maymac} ${r.s.name}(${r.s.sid})`).join('\n');
+  copyToClipboard(text)
+    .then(()=>showToast(`📋 ${date} 명단 ${rows.length}명 복사됨`))
+    .catch(()=>showToast('복사 실패'));
 }
 
 function closeClipModal(){
