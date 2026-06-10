@@ -155,10 +155,14 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
 .settings-zone{margin-top:24px;background:rgba(254,238,223,.4);border:1px solid var(--border);border-radius:14px;padding:18px 22px;}
 .settings-zone .settings-title{font-size:13px;font-weight:700;color:var(--dark);margin-bottom:14px;}
 .settings-zone .settings-row{display:flex;align-items:center;gap:14px;margin-bottom:10px;}
+.settings-zone .settings-row-block{display:block;}
+.settings-zone .settings-row-block label{display:block;margin-bottom:6px;}
 .settings-zone .settings-row label{font-size:12px;color:var(--muted);min-width:120px;font-weight:500;}
 .settings-zone .settings-row input{flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:13px;font-family:inherit;}
-.settings-zone .settings-row input:focus{outline:none;border-color:var(--lavender);}
-.settings-zone .settings-desc{font-size:11px;color:var(--muted);margin-top:4px;line-height:1.5;}
+.settings-zone .settings-row textarea{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:7px;font-size:12.5px;font-family:'Noto Sans KR',sans-serif;line-height:1.6;resize:vertical;}
+.settings-zone .settings-row input:focus,.settings-zone .settings-row textarea:focus{outline:none;border-color:var(--lavender);}
+.settings-zone .settings-desc{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6;}
+.settings-zone .settings-desc code{background:#f3f0ff;padding:1px 6px;border-radius:4px;font-size:11px;color:#6a52a8;font-family:monospace;}
 
 /* 백업/복원 영역 */
 .backup-zone{margin-top:24px;background:rgba(212,214,252,.25);border:1px solid var(--border);border-radius:14px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;gap:18px;}
@@ -263,7 +267,14 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
       <label for="set-consult-type">상담 유형 표기</label>
       <input type="text" id="set-consult-type" placeholder="예: 학생부종합/교과" oninput="saveSettingsField('consultType', this.value)">
     </div>
-    <div class="settings-desc">학생 안내문에 자동으로 들어갑니다. 변경 사항은 즉시 저장됩니다.</div>
+    <div class="settings-row settings-row-block">
+      <label for="set-body">안내문 본문</label>
+      <textarea id="set-body" rows="14" oninput="saveSettingsField('body', this.value)" placeholder="자유롭게 작성하세요. 줄바꿈은 그대로 유지됩니다."></textarea>
+    </div>
+    <div class="settings-desc">
+      <b>편집 팁</b>: <code>**굵게**</code>로 강조 표시 / 빈 줄로 단락 구분 / 학생 정보·일정·장소·유형은 자동으로 채워지므로 본문에 다시 쓸 필요 없음<br>
+      <button class="btn-restore" style="margin-top:8px;font-size:11px;padding:5px 10px;" onclick="resetAnnouncementBody()">↺ 본문 기본값으로 되돌리기</button>
+    </div>
   </div>
 
   <!-- 백업 / 복원 -->
@@ -480,9 +491,27 @@ let consultants=[];
 let assignments={};  // idx → {consultantId,consultantName,dateId,timeId,date,startTime,endTime}
 
 // 운영 설정 (편집 가능, localStorage 영구화)
+const DEFAULT_ANNOUNCEMENT_BODY = `**1. 상담 전 준비할 것**
+
+① **생기부**
+사전에 선생님께 제출했던 생기부는 상담 후 원본으로 돌려드립니다.
+
+② **마이맥 성적입력**
+대성마이맥 합격예측 서비스에 성적 입력을 해주셔야 합니다. 성적 입력 시 꼭 생활반이 아닌 **마이맥반**으로 입력해 주셔야 상담 진행이 가능합니다.
+
+③ **수시 희망 조사 (디멤버 설문)**
+디멤버를 통해 응답했던 내용을 조사서 형식으로 상담 선생님께 전달했습니다. 변동사항이 있을 경우 행정실 방문해 주세요.
+
+**2. 학부모님과 충분히 논의해 주세요**
+전화나 학부모 메시지 등으로 학부모님과 충분한 논의를 한 후, 궁금한 점이나 고민되는 점을 메모해 두시는 것을 추천합니다.
+
+**3. 상담 후 안내**
+상담 리포트를 받으면 **학생지원실**로 가서 학부모님과 상담 내용에 대해 통화를 하시면 됩니다.`;
+
 const DEFAULT_SETTINGS = {
   location: 'L층 상담실(행정실 옆)',
-  consultType: '학생부종합/교과'
+  consultType: '학생부종합/교과',
+  body: DEFAULT_ANNOUNCEMENT_BODY
 };
 let settings = {...DEFAULT_SETTINGS};
 
@@ -1582,18 +1611,37 @@ function printForms(idxList){
   _renderFormsInNewWindow(stuList, {autoprint:true});
 }
 
-// 설정 한 필드 즉시 저장 (입력 onchange)
+// 설정 한 필드 즉시 저장 (입력 onchange) — 사용자 입력 그대로 저장 (빈 값 허용)
+// 페이지 새로고침 시 syncSettingsUI에서 빈 값은 기본값으로 자동 복원됨
 function saveSettingsField(key, value){
-  settings[key] = String(value||'').trim() || DEFAULT_SETTINGS[key];
+  settings[key] = String(value);
   save();
 }
 
 // 설정 입력란에 현재 값 채우기 (초기 로드 / 페이지 진입 시)
+// settings의 어떤 키든 빈 값이면 자동으로 기본값으로 복원
 function syncSettingsUI(){
+  let restored = false;
+  if(!settings.location || !String(settings.location).trim()){ settings.location = DEFAULT_SETTINGS.location; restored = true; }
+  if(!settings.consultType || !String(settings.consultType).trim()){ settings.consultType = DEFAULT_SETTINGS.consultType; restored = true; }
+  if(!settings.body || !String(settings.body).trim()){ settings.body = DEFAULT_SETTINGS.body; restored = true; }
+  if(restored) save();
+
   const l = document.getElementById('set-location');
   const c = document.getElementById('set-consult-type');
+  const b = document.getElementById('set-body');
   if(l) l.value = settings.location;
   if(c) c.value = settings.consultType;
+  if(b) b.value = settings.body;
+}
+
+// 안내문 본문을 기본값으로 되돌림
+function resetAnnouncementBody(){
+  if(!confirm('안내문 본문을 기본값으로 되돌릴까요?\n현재 편집한 내용은 사라집니다.'))return;
+  settings.body = DEFAULT_ANNOUNCEMENT_BODY;
+  save();
+  syncSettingsUI();
+  showToast('본문 기본값으로 복구');
 }
 
 // 안내문 HTML 빌더 (A4 세로 1페이지)
@@ -1646,52 +1694,23 @@ function buildAnnouncementHTML(stu, asgn){
       </div>
     </div>
 
-    <div class="ann-section-block">
-      <div class="ann-section-head">
-        <span class="ann-section-chip">1</span>
-        <span class="ann-section-title">상담 전 준비할 것</span>
-      </div>
-      <div class="ann-item-card">
-        <div class="ann-item-num">①</div>
-        <div class="ann-item-content">
-          <div class="ann-item-title">생기부</div>
-          <div class="ann-item-desc">사전에 선생님께 제출했던 생기부는 상담 후 원본으로 돌려드립니다.</div>
-        </div>
-      </div>
-      <div class="ann-item-card">
-        <div class="ann-item-num">②</div>
-        <div class="ann-item-content">
-          <div class="ann-item-title">마이맥 성적입력</div>
-          <div class="ann-item-desc">대성마이맥 합격예측 서비스에 성적 입력을 해주셔야 합니다. 성적 입력 시 꼭 생활반이 아닌 <b>마이맥반</b>으로 입력해 주셔야 상담 진행이 가능합니다.</div>
-        </div>
-      </div>
-      <div class="ann-item-card">
-        <div class="ann-item-num">③</div>
-        <div class="ann-item-content">
-          <div class="ann-item-title">수시 희망 조사 (디멤버 설문)</div>
-          <div class="ann-item-desc">디멤버를 통해 응답했던 내용을 조사서 형식으로 상담 선생님께 전달했습니다. 변동사항이 있을 경우 행정실 방문해 주세요.</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="ann-section-block">
-      <div class="ann-section-head">
-        <span class="ann-section-chip">2</span>
-        <span class="ann-section-title">학부모님과 충분히 논의해 주세요</span>
-      </div>
-      <div class="ann-plain">전화나 학부모 메시지 등으로 학부모님과 충분한 논의를 한 후, 궁금한 점이나 고민되는 점을 메모해 두시는 것을 추천합니다.</div>
-    </div>
-
-    <div class="ann-section-block">
-      <div class="ann-section-head">
-        <span class="ann-section-chip">3</span>
-        <span class="ann-section-title">상담 후 안내</span>
-      </div>
-      <div class="ann-plain">상담 리포트를 받으면 <b>학생지원실</b>로 가서 학부모님과 상담 내용에 대해 통화를 하시면 됩니다.</div>
-    </div>
+    <div class="ann-body">${renderBody(settings.body || DEFAULT_ANNOUNCEMENT_BODY)}</div>
 
     <div class="ann-brand"><img src="${QUETTA_LOGO}" alt="강남대성기숙 QUETTA"></div>
   </section>`;
+}
+
+// 안내문 본문 마크다운 → HTML 변환
+// 지원: **굵게**, 빈 줄로 단락 구분, 일반 줄바꿈은 <br>
+function renderBody(text){
+  if(!text)return '';
+  // 1) HTML escape
+  let s = _esc(text);
+  // 2) **굵게** → <b>
+  s = s.replace(/\*\*([^*\n]+?)\*\*/g, '<b>$1</b>');
+  // 3) 빈 줄로 단락 분리, 단락 안의 줄바꿈은 <br>
+  const paragraphs = s.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+  return paragraphs.map(p => `<p class="ann-p">${p.replace(/\n/g, '<br>')}</p>`).join('');
 }
 
 // 안내문 인쇄 (학생 idx 배열)
@@ -1763,36 +1782,13 @@ function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, title='수�
   .ann-place-line{font-size:11.5pt;color:#3D3660;line-height:1.7;}
   .ann-place-line b{color:#6a52a8;font-weight:700;}
 
-  /* 섹션 */
-  .ann-section-block{margin-bottom:16px;}
-  .ann-section-head{display:flex;align-items:center;gap:9px;margin-bottom:8px;}
-  .ann-section-chip{
-    display:inline-flex;align-items:center;justify-content:center;
-    width:24px;height:24px;border-radius:50%;
-    background:#BFBAFC;color:#fff;font-weight:700;font-size:10.5pt;
+  /* 안내문 본문 */
+  .ann-body{padding:4px 4px 0;}
+  .ann-p{
+    font-size:11pt;color:#3D3660;line-height:1.75;margin-bottom:12px;
   }
-  .ann-section-title{font-size:12pt;font-weight:700;color:#3D3660;letter-spacing:-0.3px;}
-
-  /* 준비물 카드 */
-  .ann-item-card{
-    display:flex;align-items:flex-start;gap:12px;
-    background:#fafaff;border-left:4px solid #F7BDE6;
-    border-radius:0 10px 10px 0;padding:10px 14px;margin:6px 0 6px 8px;
-  }
-  .ann-item-num{
-    font-family:'Noto Sans KR',sans-serif;font-weight:700;font-size:14pt;color:#BFBAFC;
-    line-height:1;flex-shrink:0;padding-top:2px;
-  }
-  .ann-item-content{flex:1;}
-  .ann-item-title{font-weight:700;font-size:10.5pt;margin-bottom:3px;color:#3D3660;}
-  .ann-item-desc{font-size:9.5pt;color:#5a4f7a;line-height:1.6;}
-  .ann-item-desc b{color:#6a52a8;}
-
-  .ann-plain{
-    font-size:10pt;color:#5a4f7a;line-height:1.65;
-    padding:8px 14px 8px 22px;
-  }
-  .ann-plain b{color:#6a52a8;font-weight:700;}
+  .ann-p:last-child{margin-bottom:0;}
+  .ann-p b{color:#6a52a8;font-weight:700;}
 
   /* 하단 로고 */
   .ann-brand{position:absolute;bottom:14mm;right:20mm;}
