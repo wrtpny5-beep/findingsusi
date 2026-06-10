@@ -297,7 +297,7 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
       <option value="done">배정 완료</option>
       <option value="none">미배정</option>
     </select>
-    <button class="btn btn-gold" onclick="exportSchedule()">🩷 구글시트 상담시간표 형식</button>
+    <button class="btn btn-gold" onclick="exportSchedule()">📋 구글시트 클립보드 복사</button>
     <button class="btn btn-ghost btn-sm" onclick="exportList()">🩷 배정 목록 엑셀</button>
     <button class="btn btn-ghost btn-sm" onclick="previewSampleForm()" style="margin-left:auto;">📄 양식 디자인 미리보기</button>
   </div>
@@ -320,6 +320,21 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
     <div class="flex gap-8 mt-16 justify-between">
       <button class="btn btn-ghost" onclick="closeModal()">취소</button>
       <button class="btn btn-primary" onclick="addStudentManual()">추가</button>
+    </div>
+  </div>
+</div>
+
+<!-- 구글시트 클립보드 복사 모달 -->
+<div id="clipModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center;" onclick="if(event.target===this)closeClipModal()">
+  <div style="background:#fff;border-radius:14px;padding:24px;width:760px;max-width:95vw;max-height:88vh;display:flex;flex-direction:column;">
+    <div style="font-size:15px;font-weight:700;margin-bottom:6px;">📋 구글시트 상담시간표</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.5;">
+      [복사하기] 누른 뒤 구글시트의 셀을 선택하고 <b>Ctrl+V</b>(맥은 <b>Cmd+V</b>)로 붙여넣으면 표가 그대로 들어갑니다 (탭 구분 TSV 형식).
+    </div>
+    <textarea id="clipPreview" readonly style="flex:1;min-height:300px;font-family:'DM Mono',monospace;font-size:11px;padding:12px;border:1px solid var(--border);border-radius:8px;resize:vertical;white-space:pre;overflow:auto;"></textarea>
+    <div class="flex gap-8 mt-16 justify-between" style="margin-top:14px;">
+      <button class="btn btn-ghost" onclick="closeClipModal()">닫기</button>
+      <button class="btn btn-primary" id="btnCopyClip" onclick="copyClipboardText()">📋 복사하기</button>
     </div>
   </div>
 </div>
@@ -1208,7 +1223,8 @@ function exportSchedule(){
   const MONTHS=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
   function fmtDate(ds){const d=new Date(ds);return `${MONTHS[d.getMonth()]} ${d.getDate()}일`;}
 
-  let csv='';
+  // TSV(탭 구분) 생성 — 구글시트에 그대로 붙여넣기 가능
+  let tsv='';
   for(const c of consultants){
     const cAsgns=Object.entries(assignments)
       .filter(([,a])=>a.consultantId===c.id)
@@ -1217,9 +1233,9 @@ function exportSchedule(){
     if(!cAsgns.length)continue;
 
     const dates=[...new Set(cAsgns.map(a=>a.date))].sort();
-    csv+=`하루 최대 ${Math.max(...dates.map(d=>cAsgns.filter(a=>a.date===d).length))}명 배정\n`;
-    csv+=`${c.name},,${dates.map(d=>fmtDate(d)).join(',,')}\n`;
-    csv+=`,,${dates.map(d=>getWd(d)).join(',,')}\n`;
+    tsv+=`하루 최대 ${Math.max(...dates.map(d=>cAsgns.filter(a=>a.date===d).length))}명 배정\n`;
+    tsv+=`${c.name}\t\t${dates.map(d=>fmtDate(d)).join('\t\t')}\n`;
+    tsv+=`\t\t${dates.map(d=>getWd(d)).join('\t\t')}\n`;
 
     const times=[...new Set(cAsgns.map(a=>`${a.startTime}~${a.endTime}`))].sort();
     for(const t of times){
@@ -1229,14 +1245,50 @@ function exportSchedule(){
         cells.push(m?`${m.s.maymac} ${m.s.name}(${m.s.sid})`:'');
         cells.push('');
       }
-      csv+=cells.join(',')+'\n';
+      tsv+=cells.join('\t')+'\n';
     }
-    csv+='\n';
+    tsv+='\n';
   }
 
-  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download=`수시상담시간표_${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url);
+  // 모달 열기
+  document.getElementById('clipPreview').value = tsv;
+  document.getElementById('clipModal').style.display = 'flex';
+  // 자동 선택
+  setTimeout(()=>{
+    const ta = document.getElementById('clipPreview');
+    ta.focus();
+    ta.setSelectionRange(0, 0);
+  }, 50);
+}
+
+function copyClipboardText(){
+  const ta = document.getElementById('clipPreview');
+  const text = ta.value;
+  const btn = document.getElementById('btnCopyClip');
+  const restore = () => { btn.textContent = '📋 복사하기'; btn.disabled = false; };
+  btn.disabled = true;
+
+  // 우선 navigator.clipboard 시도 (HTTPS에서만 작동)
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(text).then(()=>{
+      btn.textContent = '✓ 복사됨!';
+      setTimeout(restore, 1500);
+    }).catch(()=>{
+      // fallback
+      ta.select();
+      try{ document.execCommand('copy'); btn.textContent='✓ 복사됨!'; setTimeout(restore, 1500); }
+      catch{ alert('자동 복사 실패. 텍스트 영역을 직접 선택해서 복사해주세요.'); restore(); }
+    });
+  } else {
+    // 옛 브라우저 fallback
+    ta.select();
+    try{ document.execCommand('copy'); btn.textContent='✓ 복사됨!'; setTimeout(restore, 1500); }
+    catch{ alert('자동 복사 실패. 텍스트 영역을 직접 선택해서 복사해주세요.'); restore(); }
+  }
+}
+
+function closeClipModal(){
+  document.getElementById('clipModal').style.display = 'none';
 }
 
 function exportList(){
