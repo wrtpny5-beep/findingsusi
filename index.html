@@ -321,19 +321,11 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
   </div>
   <div class="card">
     <div class="card-title">🩷 배정 옵션</div>
-    <div class="flex gap-12" style="flex-wrap:wrap;align-items:flex-end;">
-      <div>
-        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">정렬 순서</label>
-        <select id="optOrder">
-          <option value="class">반 순서 (A→X→I→O→M→K→N→D→S)</option>
-          <option value="name">이름 순</option>
-          <option value="id">학번 순</option>
-        </select>
-      </div>
-      <div style="font-size:12px;color:var(--muted);max-width:320px;line-height:1.5;">
-        ※ 시간충돌 없는 슬롯 중 가장 이른 시간 우선 배정<br>
-        ※ 충돌 없는 슬롯이 없으면 그 학생은 미배정으로 남김
-      </div>
+    <div style="font-size:12px;color:var(--muted);line-height:1.7;">
+      ※ 학생을 <b>무작위 순서</b>로 처리 (앞반/뒤반 차별 없이 균등)<br>
+      ※ 각 학생은 시간충돌 없는 슬롯 중 가장 이른 시간에 배정<br>
+      ※ 충돌 없는 슬롯이 없으면 그 학생은 미배정으로 남김 (배정 로그에 명단 표시)<br>
+      ※ 매 실행마다 셔플되므로 결과가 달라질 수 있음
     </div>
     <div class="mt-16 flex gap-8">
       <button class="btn btn-primary" onclick="runAssign()" id="btnAssign">🩷 자동 배정 실행</button>
@@ -402,7 +394,13 @@ const MM_TABLE = {
 };
 
 // 선택이동 시간표 내장
-const SCHEDULE = {"탐구A_사회문화(●)":{"day":"수","periods":[1,2,3]},"탐구A_생활과윤리(●)":{"day":"수","periods":[1,2,3]},"탐구A_윤리와사상(●)":{"day":"수","periods":[1,2,3]},"탐구A_세계지리(●)":{"day":"수","periods":[1,2,3]},"탐구A_동아시아사(●)":{"day":"수","periods":[1,2,3]},"탐구A_물리학I(●)":{"day":"수","periods":[1,2,3]},"탐구A_생명과학I(●)":{"day":"수","periods":[1,2,3]},"탐구A_지구과학I(●)":{"day":"수","periods":[1,2,3]},"탐구B_사회문화(㉠)":{"day":"수","periods":[5,6,7]},"탐구B_사회문화(㉡)":{"day":"수","periods":[5,6,7]},"탐구B_생활과윤리(●)":{"day":"수","periods":[5,6,7]},"탐구B_한국지리(●)":{"day":"수","periods":[5,6,7]},"탐구B_세계사(●)":{"day":"수","periods":[5,6,7]},"탐구B_정치와 법(●)":{"day":"수","periods":[5,6,7]},"탐구B_생명과학I(●)":{"day":"수","periods":[5,6,7]},"탐구B_지구과학I(●)":{"day":"수","periods":[5,6,7]},"탐구C_화학I(●)":{"day":"수","periods":[10,11,12]},"자율F1_CRUX 독서(●)":{"day":"월","periods":[8,9]},"자율F1_CONSTANT 해설(●)":{"day":"월","periods":[8,9]},"자율F1_CIRCUIT 미적분 선택자(●)":{"day":"월","periods":[8,9]},"자율F1_CRUX 확통 선택자(●)":{"day":"월","periods":[8,9]},"자율F1_AL 미적분 BASIC(●)":{"day":"월","periods":[8,9]},"자율F1_AL 확통 BASIC(●)":{"day":"월","periods":[8,9]},"자율F2_CRUX 문학(●)":{"day":"목","periods":[8,9]},"자율F2_수I종합(●)":{"day":"목","periods":[8,9]},"자율F2._미적분 종합(●)":{"day":"목","periods":[10,11]},"자율F2_CIRCUIT 확통 선택자(●)":{"day":"목","periods":[8,9]},"자율F2_CONNEX 미적분 선택자(●)":{"day":"목","periods":[8,9]},"자율F2_AL 수IBASIC(●)":{"day":"목","periods":[8,9]},"자율F3_언어와매체 BASIC(●)":{"day":"금","periods":[5,6]},"자율F3_영어 종합(●)":{"day":"금","periods":[5,6]},"자율F3_CIRCUIT 수I,II(●)":{"day":"금","periods":[5,6]},"자율F3_CONNEX 확통 선택자(●)":{"day":"금","periods":[5,6]},"자율F3_CRUX 미적분 선택자(●)":{"day":"금","periods":[5,6]},"자율F3._수II 종합(●)":{"day":"월","periods":[10,11]},"자율F3_AL 수II BASIC(●)":{"day":"금","periods":[5,6]},"자율F4_AL 수I PLUS(●)":{"day":"수","periods":[10,11,12]},"자율F4_AL 수II PLUS(●)":{"day":"수","periods":[10,11,12]},"자율F4_AL 미적분 PLUS(●)":{"day":"수","periods":[10,11,12]},"자율F4_AL 확통 PLUS(●)":{"day":"수","periods":[10,11,12]},"자율F5_AL 파일럿 수업_미적분(●)":{"day":"금","periods":[10,11,12]},"자율F5_AL 파일럿 수업_확통(●)":{"day":"금","periods":[10,11,12]},"과탐테마(화)_물리학I(테마)(개념편)":{"day":"화","periods":[10,11]},"과탐테마(화)_화학I(테마)(개념편)":{"day":"화","periods":[10,11]},"과탐테마(화)_지구과학I(테마)(개념편)":{"day":"화","periods":[10,11]},"과탐테마(토)_생명과학I(테마)(개념편)":{"day":"토","periods":[8,9]},"K국어A._독서(㉠)":{"day":"목","periods":[2,3]},"K국어A_독서(㉡)":{"day":"목","periods":[3,4]},"K국어A_독서(㉢)":{"day":"목","periods":[3,4]},"K국어B._문학(㉠)":{"day":"화","periods":[5,6]},"K국어B_문학(㉡)":{"day":"화","periods":[7,8]},"K국어B_문학(㉢)":{"day":"화","periods":[7,8]},"K국어S_언어와매체(㉠)":{"day":"금","periods":[3,4]},"K국어S_언어와매체(㉡)":{"day":"금","periods":[3,4]},"K국어S_화법과작문(㉠)":{"day":"금","periods":[3,4]},"K국어S_화법과작문(㉡)":{"day":"금","periods":[3,4]},"K수학A._수학I(㉠)":{"day":"목","periods":[6,7]},"K수학A_수학I(㉡)":{"day":"목","periods":[5,6,7]},"K수학A_수학I(㉢)":{"day":"목","periods":[5,6,7]},"K수학A_수학I(㉣)":{"day":"목","periods":[5,6,7]},"K수학B._수학II(㉠)":{"day":"화","periods":[7,8]},"K수학B_수학II(㉡)":{"day":"월","periods":[5,6,7]},"K수학B_수학II(㉢)":{"day":"월","periods":[5,6,7]},"K수학B_수학II(㉣)":{"day":"월","periods":[5,6,7]},"K수학S._미적분(㉠)":{"day":"목","periods":[4,5]},"K수학S_미적분(㉡)":{"day":"화","periods":[2,3,4]},"K수학S.._확률과통계(㉠)":{"day":"화","periods":[3,4]},"K수학S_확률과통계(㉡)":{"day":"화","periods":[2,3,4]},"K영어_영어(㉠)":{"day":"월","periods":[3,4]},"K영어_영어(㉡)":{"day":"월","periods":[3,4]},"K영어_영어(㉢)":{"day":"월","periods":[3,4]},"K논술_수리논술(●)":{"day":"금","periods":[7,8]},"K논술_인문논술(●)":{"day":"금","periods":[7,8]},"K한국사_한국사(●)":{"day":"화","periods":[9]},"S국어A_독서(㉠)":{"day":"목","periods":[1,2]},"S국어A_독서(㉡)":{"day":"목","periods":[1,2]},"S국어B_문학(㉠)":{"day":"화","periods":[5,6]},"S국어B_문학(㉡)":{"day":"화","periods":[5,6]},"S국어S_언어와매체(㉠)":{"day":"금","periods":[1,2]},"S국어S_언어와매체(㉡)":{"day":"금","periods":[1,2]},"S국어S_화법과작문(●)":{"day":"금","periods":[1,2]},"S수학A_수학I(㉠)":{"day":"금","periods":[7,8,9]},"S수학A_수학I(㉡)":{"day":"금","periods":[7,8,9]},"S수학A_수학I(㉢)":{"day":"금","periods":[7,8,9]},"S수학B_수학II(㉠)":{"day":"화","periods":[2,3,4]},"S수학B_수학II(㉡)":{"day":"화","periods":[2,3,4]},"S수학B_수학II(㉢)":{"day":"화","periods":[2,3,4]},"S수학S_미적분(㉠)":{"day":"목","periods":[5,6,7]},"S수학S_미적분(㉡)":{"day":"목","periods":[5,6,7]},"S수학S._확률과통계(㉠)":{"day":"목","periods":[10,11,12]},"S수학S._확률과통계(㉡)":{"day":"목","periods":[10,11,12]},"S영어_영어(㉠)":{"day":"월","periods":[1,2]},"S영어_영어(㉡)":{"day":"월","periods":[1,2]},"S논술_수리논술(●)":{"day":"월","periods":[6,7]},"S논술_인문논술(●)":{"day":"월","periods":[6,7]},"S한국사_한국사(●)":{"day":"월","periods":[3]}};
+const SCHEDULE = {"탐구A_사회문화(●)":{"day":"수","periods":[1,2,3]},"탐구A_생활과윤리(●)":{"day":"수","periods":[1,2,3]},"탐구A_윤리와사상(●)":{"day":"수","periods":[1,2,3]},"탐구A_세계지리(●)":{"day":"수","periods":[1,2,3]},"탐구A_동아시아사(●)":{"day":"수","periods":[1,2,3]},"탐구A_물리학I(●)":{"day":"수","periods":[1,2,3]},"탐구A_생명과학I(●)":{"day":"수","periods":[1,2,3]},"탐구A_지구과학I(●)":{"day":"수","periods":[1,2,3]},"탐구B_사회문화(㉠)":{"day":"수","periods":[5,6,7]},"탐구B_사회문화(㉡)":{"day":"수","periods":[5,6,7]},"탐구B_생활과윤리(●)":{"day":"수","periods":[5,6,7]},"탐구B_한국지리(●)":{"day":"수","periods":[5,6,7]},"탐구B_세계사(●)":{"day":"수","periods":[5,6,7]},"탐구B_정치와 법(●)":{"day":"수","periods":[5,6,7]},"탐구B_생명과학I(●)":{"day":"수","periods":[5,6,7]},"탐구B_지구과학I(●)":{"day":"수","periods":[5,6,7]},"탐구C_화학I(●)":{"day":"수","periods":[10,11,12]},"자율F1_CRUX 독서(●)":{"day":"월","periods":[8,9]},"자율F1_CONSTANT 해설(●)":{"day":"월","periods":[8,9]},"자율F1_CIRCUIT 미적분 선택자(●)":{"day":"월","periods":[8,9]},"자율F1_CRUX 확통 선택자(●)":{"day":"월","periods":[8,9]},"자율F1_AL 미적분 BASIC(●)":{"day":"월","periods":[8,9]},"자율F1_AL 확통 BASIC(●)":{"day":"월","periods":[8,9]},"자율F2_CRUX 문학(●)":{"day":"목","periods":[8,9]},"자율F2_수I종합(●)":{"day":"목","periods":[8,9]},"자율F2._미적분 종합(●)":{"day":"목","periods":[10,11]},"자율F2_CIRCUIT 확통 선택자(●)":{"day":"목","periods":[8,9]},"자율F2_CONNEX 미적분 선택자(●)":{"day":"목","periods":[8,9]},"자율F2_AL 수IBASIC(●)":{"day":"목","periods":[8,9]},"자율F3_언어와매체 BASIC(●)":{"day":"금","periods":[5,6]},"자율F3_영어 종합(●)":{"day":"금","periods":[5,6]},"자율F3_CIRCUIT 수I,II(●)":{"day":"금","periods":[5,6]},"자율F3_CONNEX 확통 선택자(●)":{"day":"금","periods":[5,6]},"자율F3_CRUX 미적분 선택자(●)":{"day":"금","periods":[5,6]},"자율F3._수II 종합(●)":{"day":"월","periods":[10,11]},"자율F3_AL 수II BASIC(●)":{"day":"금","periods":[5,6]},"자율F4_AL 수I PLUS(●)":{"day":"수","periods":[10,11,12]},"자율F4_AL 수II PLUS(●)":{"day":"수","periods":[10,11,12]},"자율F4_AL 미적분 PLUS(●)":{"day":"수","periods":[10,11,12]},"자율F4_AL 확통 PLUS(●)":{"day":"수","periods":[10,11,12]},"자율F5_AL 파일럿 수업_미적분(●)":{"day":"금","periods":[10,11,12]},"자율F5_AL 파일럿 수업_확통(●)":{"day":"금","periods":[10,11,12]},"과탐테마(화)_물리학I(테마)(개념편)":{"day":"화","periods":[10,11]},"과탐테마(화)_화학I(테마)(개념편)":{"day":"화","periods":[10,11]},"과탐테마(화)_지구과학I(테마)(개념편)":{"day":"화","periods":[10,11]},"과탐테마(토)_생명과학I(테마)(개념편)":{"day":"토","periods":[8,9]},"K국어A._독서(㉠)":{"day":"목","periods":[2,3]},"K국어A_독서(㉡)":{"day":"목","periods":[3,4]},"K국어A_독서(㉢)":{"day":"목","periods":[3,4]},"K국어B._문학(㉠)":{"day":"화","periods":[5,6]},"K국어B_문학(㉡)":{"day":"화","periods":[7,8]},"K국어B_문학(㉢)":{"day":"화","periods":[7,8]},"K국어S_언어와매체(㉠)":{"day":"금","periods":[3,4]},"K국어S_언어와매체(㉡)":{"day":"금","periods":[3,4]},"K국어S_화법과작문(㉠)":{"day":"금","periods":[3,4]},"K국어S_화법과작문(㉡)":{"day":"금","periods":[3,4]},"K수학A._수학I(㉠)":{"day":"목","periods":[6,7]},"K수학A_수학I(㉡)":{"day":"목","periods":[5,6,7]},"K수학A_수학I(㉢)":{"day":"목","periods":[5,6,7]},"K수학A_수학I(㉣)":{"day":"목","periods":[5,6,7]},"K수학B._수학II(㉠)":{"day":"화","periods":[7,8]},"K수학B_수학II(㉡)":{"day":"월","periods":[5,6,7]},"K수학B_수학II(㉢)":{"day":"월","periods":[5,6,7]},"K수학B_수학II(㉣)":{"day":"월","periods":[5,6,7]},"K수학S._미적분(㉠)":{"day":"목","periods":[4,5]},"K수학S_미적분(㉡)":{"day":"화","periods":[2,3,4]},"K수학S.._확률과통계(㉠)":{"day":"화","periods":[3,4]},"K수학S_확률과통계(㉡)":{"day":"화","periods":[2,3,4]},"K영어_영어(㉠)":{"day":"월","periods":[3,4]},"K영어_영어(㉡)":{"day":"월","periods":[3,4]},"K영어_영어(㉢)":{"day":"월","periods":[3,4]},"K논술_수리논술(●)":{"day":"금","periods":[7,8]},"K논술_인문논술(●)":{"day":"금","periods":[7,8]},"K한국사_한국사(●)":{"day":"화","periods":[9]},"S국어A_독서(㉠)":{"day":"목","periods":[1,2]},"S국어A_독서(㉡)":{"day":"목","periods":[1,2]},"S국어B_문학(㉠)":{"day":"화","periods":[5,6]},"S국어B_문학(㉡)":{"day":"화","periods":[5,6]},"S국어S_언어와매체(㉠)":{"day":"금","periods":[1,2]},"S국어S_언어와매체(㉡)":{"day":"금","periods":[1,2]},"S국어S_화법과작문(●)":{"day":"금","periods":[1,2]},"S수학A_수학I(㉠)":{"day":"금","periods":[7,8,9]},"S수학A_수학I(㉡)":{"day":"금","periods":[7,8,9]},"S수학A_수학I(㉢)":{"day":"금","periods":[7,8,9]},"S수학B_수학II(㉠)":{"day":"화","periods":[2,3,4]},"S수학B_수학II(㉡)":{"day":"화","periods":[2,3,4]},"S수학B_수학II(㉢)":{"day":"화","periods":[2,3,4]},"S수학S_미적분(㉠)":{"day":"목","periods":[5,6,7]},"S수학S_미적분(㉡)":{"day":"목","periods":[5,6,7]},"S수학S._확률과통계(㉠)":{"day":"목","periods":[10,11,12]},"S수학S._확률과통계(㉡)":{"day":"목","periods":[10,11,12]},"S영어_영어(㉠)":{"day":"월","periods":[1,2]},"S영어_영어(㉡)":{"day":"월","periods":[1,2]},"S논술_수리논술(●)":{"day":"월","periods":[6,7]},"S논술_인문논술(●)":{"day":"월","periods":[6,7]},"S한국사_한국사(●)":{"day":"월","periods":[3]},
+// === 반수시즌 수학반 (주 2회 수업) ===
+"B수학A_수학I(●)":[{"day":"월","periods":[6,7]},{"day":"목","periods":[5,6]}],
+"B수학B_수학II(●)":[{"day":"화","periods":[3,4]},{"day":"금","periods":[1,2]}],
+"B수학S_미적분(●)":[{"day":"화","periods":[8,9]},{"day":"토","periods":[6,7]}],
+"B수학S._확률과통계(●)":[{"day":"화","periods":[8,9]},{"day":"금","periods":[10,11]}]
+};
 
 const PERIOD_TIME={1:{s:8*60,e:8*60+50},2:{s:9*60,e:9*60+50},3:{s:10*60,e:10*60+50},4:{s:11*60,e:11*60+50},5:{s:13*60+10,e:14*60},6:{s:14*60+10,e:15*60},7:{s:15*60+10,e:16*60},8:{s:16*60+10,e:17*60},9:{s:17*60+10,e:18*60},10:{s:19*60+10,e:20*60},11:{s:20*60+10,e:21*60},12:{s:21*60+10,e:22*60}};
 const CLASS_ORDER=['A','X','I','O','M','K','N','D','S'];
@@ -414,7 +412,7 @@ const SUBJECT_HEADERS = new Set([
   '자율선택1','자율선택2','자율선택2-1','자율선택3','자율선택3-1','자율선택4','자율선택5',
   '과탐테마','영상수업'
 ]);
-const SKIP_COMBOS=new Set(['(자습)','(영상)','(사문영상)','(야간)','반수','']);
+const SKIP_COMBOS=new Set(['(자습)','(영상)','(사문영상)','(야간)','']);
 
 // ============================================================
 // 양식 컬럼 매핑 (구글설문 .xlsx → formData)
@@ -561,12 +559,17 @@ function getClassCode(반,그룹){return 반&&그룹?String(반).trim()+String(�
 function getMM(classCode){return MM_TABLE[classCode]||{t:'',m:'?'};}
 
 // buildBusy: master.subjects([{subj,group,combo}, ...])로부터 시간 블록 생성
+// 한 키에 여러 시간(주 2회 수업 등)을 배열로 등록 가능
 function buildBusy(master){
   const blocks=[];
   if(!master || !Array.isArray(master.subjects)) return blocks;
   for(const{subj, group, combo} of master.subjects){
-    if(!subj || !group || !combo) continue;
-    const realCombo = String(combo).replace('(Live)','').trim();
+    if(!subj || !group) continue;
+    let realCombo = String(combo||'').replace('(Live)','').trim();
+    // (반수) 또는 반수 → 정식 수업이므로 ●로 정규화 (SCHEDULE 키와 매칭)
+    if(realCombo === '(반수)' || realCombo === '반수') realCombo = '●';
+    // 빈 값도 ●로 fallback (조합 분기 없는 단일 반)
+    if(!realCombo) realCombo = '●';
     if(SKIP_COMBOS.has(realCombo) || realCombo.startsWith('(')) continue;
     if(String(subj).includes('자습')) continue;
     const gs=String(group).split(',').map(x=>x.trim());
@@ -575,9 +578,13 @@ function buildBusy(master){
       const code=norm(`${gs[i]}_${ss[i]||ss[0]}(${realCombo})`);
       const sched=SCHEDULE[code];
       if(!sched)continue;
-      const ps=sched.periods;
-      const ts=PERIOD_TIME[Math.min(...ps)],te=PERIOD_TIME[Math.max(...ps)];
-      if(ts&&te)blocks.push({day:sched.day,s:ts.s,e:te.e});
+      // SCHEDULE 값이 단일 객체 또는 배열 둘 다 처리 (주 2회 수업 지원)
+      const schedList = Array.isArray(sched) ? sched : [sched];
+      for(const sc of schedList){
+        const ps=sc.periods;
+        const ts=PERIOD_TIME[Math.min(...ps)],te=PERIOD_TIME[Math.max(...ps)];
+        if(ts&&te)blocks.push({day:sc.day,s:ts.s,e:te.e});
+      }
     }
   }
   return blocks;
@@ -1140,12 +1147,12 @@ function _runAssign(){
   }
   log(`유효 슬롯: ${allSlots.length}개`);
 
-  // 학생 정렬
-  const order=document.getElementById('optOrder').value;
+  // 학생 무작위 셔플 (Fisher-Yates) — 앞반/뒤반 차별 없이 균등하게 처리
   let sorted=[...targetList.entries()];
-  if(order==='class')sorted.sort((a,b)=>{const ai=CLASS_ORDER.indexOf(String(a[1].classCode).slice(0,1));const bi=CLASS_ORDER.indexOf(String(b[1].classCode).slice(0,1));return ai!==bi?ai-bi:a[1].name.localeCompare(b[1].name,'ko');});
-  else if(order==='name')sorted.sort((a,b)=>a[1].name.localeCompare(b[1].name,'ko'));
-  else sorted.sort((a,b)=>String(a[1].sid).localeCompare(String(b[1].sid)));
+  for(let i=sorted.length-1; i>0; i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [sorted[i],sorted[j]]=[sorted[j],sorted[i]];
+  }
 
   const usedSlots=new Set();
   let doneN=0,failN=0;
