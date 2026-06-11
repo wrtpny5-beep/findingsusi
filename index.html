@@ -1106,7 +1106,7 @@ function clearAssign(){
   if(!confirm('배정을 초기화할까요?'))return;
   assignments={};save();updateStats();
   document.getElementById('algoLog').innerHTML='<span class="text-muted">초기화됨.</span>';
-  renderSlots();
+  renderSlots();renderStudentTable();renderResult();
 }
 
 function log(msg,t=''){
@@ -1179,7 +1179,7 @@ function _runAssign(){
     }
   }
 
-  save();updateStats();renderSlots();
+  save();updateStats();renderSlots();renderStudentTable();renderResult();
   log(`🩷 완료: ${doneN}명 배정`,'ok');
   if(failN>0){
     log(`⚠ 미배정: ${failN}명 (수업 충돌로 가능한 슬롯 없음)`,'warn');
