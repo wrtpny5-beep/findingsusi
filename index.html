@@ -385,20 +385,25 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
     <div class="card-title">🩷 학생 답변 조회</div>
     <div class="flex gap-12" style="flex-wrap:wrap;align-items:flex-end;">
       <div>
-        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">반 선택</label>
-        <select id="ansClassFilter" onchange="renderAnswers()" style="min-width:160px;">
-          <option value="">전체 반</option>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">마이맥반</label>
+        <select id="ansMMFilter" onchange="renderAnswers()" style="min-width:140px;">
+          <option value="">전체 마이맥반</option>
         </select>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">이름 검색</label>
+        <input type="text" id="ansNameSearch" oninput="renderAnswers()" placeholder="이름 일부 입력" style="min-width:160px;">
       </div>
       <div>
         <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">정렬</label>
         <select id="ansSort" onchange="renderAnswers()">
           <option value="name">이름순</option>
           <option value="sid">학번순</option>
+          <option value="class">생활반순</option>
         </select>
       </div>
       <div style="flex:1;text-align:right;">
-        <button class="btn btn-ghost btn-sm" onclick="printAnswers()">📄 선택 반 인쇄</button>
+        <button class="btn btn-ghost btn-sm" onclick="printAnswers()">📄 표시 학생 인쇄</button>
       </div>
     </div>
   </div>
@@ -1395,34 +1400,43 @@ function renderResult(){
 // TAB 5: 답변 조회 — 반별로 학생 답변(매핑된 질문) 확인
 // ============================================================
 function renderAnswers(){
-  // 반 드롭다운 옵션 동적 채움 (학생관리 탭 들어오기 전엔 비어있음)
-  const sel = document.getElementById('ansClassFilter');
+  // 마이맥반 드롭다운 옵션 동적 채움
+  const sel = document.getElementById('ansMMFilter');
   const currentVal = sel.value;
-  const allClasses = [...new Set(targetList.map(s => s.classCode).filter(Boolean))].sort();
-  sel.innerHTML = '<option value="">전체 반</option>' +
-    allClasses.map(c => `<option value="${c}"${c===currentVal?' selected':''}>${c}</option>`).join('');
+  const allMM = [...new Set(targetList.map(s => s.maymac).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">전체 마이맥반</option>' +
+    allMM.map(c => `<option value="${c}"${c===currentVal?' selected':''}>${c}</option>`).join('');
 
   const wrap = document.getElementById('answersWrap');
   if(!targetList.length){
-    wrap.innerHTML = '<div class="empty-state card"><div class="icon">🩷</div><p>학생을 업로드하고 반을 선택해주세요</p></div>';
+    wrap.innerHTML = '<div class="empty-state card"><div class="icon">🩷</div><p>학생을 업로드하고 마이맥반을 선택해주세요</p></div>';
     return;
   }
 
-  const filterClass = sel.value;
+  const filterMM = sel.value;
+  const nameQuery = (document.getElementById('ansNameSearch').value || '').trim().toLowerCase();
   const sortMode = document.getElementById('ansSort').value;
-  let students = filterClass ? targetList.filter(s => s.classCode === filterClass) : [...targetList];
+
+  let students = [...targetList];
+  if(filterMM) students = students.filter(s => s.maymac === filterMM);
+  if(nameQuery) students = students.filter(s => String(s.name||'').toLowerCase().includes(nameQuery) || String(s.sid||'').includes(nameQuery));
+
   if(sortMode === 'sid') students.sort((a,b) => String(a.sid).localeCompare(String(b.sid)));
+  else if(sortMode === 'class') students.sort((a,b) => String(a.classCode||'').localeCompare(String(b.classCode||''),'ko') || a.name.localeCompare(b.name,'ko'));
   else students.sort((a,b) => a.name.localeCompare(b.name, 'ko'));
 
   if(!students.length){
-    wrap.innerHTML = `<div class="card ans-summary">${filterClass||'전체'} 반에 학생이 없습니다.</div>`;
+    const label = filterMM ? `마이맥반 ${filterMM}` : (nameQuery ? `"${nameQuery}"` : '전체');
+    wrap.innerHTML = `<div class="card ans-summary">${label}에 해당하는 학생이 없습니다.</div>`;
     return;
   }
 
   const py = students.find(s => s.formData?.pastYear)?.formData?.pastYear || LAST_GRADE;
   const ply = students.find(s => s.formData?.planYear)?.formData?.planYear || CURRENT_GRADE;
 
-  let html = `<div class="ans-summary card">📋 ${filterClass||'전체'} 반 · 총 <b>${students.length}명</b></div>`;
+  const filterLabel = filterMM ? `마이맥반 ${filterMM}` : '전체';
+  const searchLabel = nameQuery ? ` · 검색: <b>${_esc(nameQuery)}</b>` : '';
+  let html = `<div class="ans-summary card">📋 ${filterLabel}${searchLabel} · 총 <b>${students.length}명</b></div>`;
 
   for(const s of students){
     const fd = s.formData || {};
@@ -1474,16 +1488,24 @@ function renderAnswers(){
 
 // 선택 반의 답변을 한 페이지에 인쇄 (B5 요약 형태)
 function printAnswers(){
-  const sel = document.getElementById('ansClassFilter');
-  const filterClass = sel.value;
+  const sel = document.getElementById('ansMMFilter');
+  const filterMM = sel.value;
+  const nameQuery = (document.getElementById('ansNameSearch').value || '').trim().toLowerCase();
   const sortMode = document.getElementById('ansSort').value;
-  let students = filterClass ? targetList.filter(s => s.classCode === filterClass) : [...targetList];
+
+  let students = [...targetList];
+  if(filterMM) students = students.filter(s => s.maymac === filterMM);
+  if(nameQuery) students = students.filter(s => String(s.name||'').toLowerCase().includes(nameQuery) || String(s.sid||'').includes(nameQuery));
   if(!students.length){alert('표시할 학생이 없습니다.');return;}
+
   if(sortMode === 'sid') students.sort((a,b) => String(a.sid).localeCompare(String(b.sid)));
+  else if(sortMode === 'class') students.sort((a,b) => String(a.classCode||'').localeCompare(String(b.classCode||''),'ko') || a.name.localeCompare(b.name,'ko'));
   else students.sort((a,b) => a.name.localeCompare(b.name, 'ko'));
 
   const py = students.find(s => s.formData?.pastYear)?.formData?.pastYear || LAST_GRADE;
   const ply = students.find(s => s.formData?.planYear)?.formData?.planYear || CURRENT_GRADE;
+
+  const headerLabel = filterMM ? `마이맥반 ${filterMM}` : (nameQuery ? `"${nameQuery}" 검색 결과` : '전체');
 
   const w = window.open('','_blank');
   let body = '';
@@ -1532,7 +1554,7 @@ function printAnswers(){
   tr:nth-child(odd) td{background:#fafafa;}
   .nd{font-style:italic;color:#999;font-size:9pt;padding:2pt 0;}
   </style></head><body>
-  <div class="header">학생 답변 조회 — ${filterClass||'전체 반'} (${students.length}명)</div>
+  <div class="header">학생 답변 조회 — ${headerLabel} (${students.length}명)</div>
   ${body}
   <script>setTimeout(()=>window.print(),300);<\/script>
   </body></html>`);
