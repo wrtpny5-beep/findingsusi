@@ -175,6 +175,26 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
 .btn-restore{background:#fff;color:var(--dark);border:1px solid var(--lavender);padding:9px 16px;border-radius:9px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;}
 .btn-restore:hover{background:var(--periwinkle);}
 
+/* 답변 조회 탭 */
+.ans-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px 22px;margin-bottom:14px;}
+.ans-header{display:flex;align-items:baseline;gap:10px;padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:12px;flex-wrap:wrap;}
+.ans-sid{font-weight:600;color:var(--muted);font-size:12px;}
+.ans-name{font-size:15px;font-weight:700;color:var(--dark);}
+.ans-class{background:var(--periwinkle);color:var(--purple-deep);padding:3px 9px;border-radius:8px;font-size:11px;font-weight:600;}
+.ans-mm{background:var(--pink);color:var(--purple-deep);padding:3px 9px;border-radius:8px;font-size:11px;font-weight:600;}
+.ans-single-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 24px;margin-bottom:14px;font-size:12.5px;}
+.ans-single-row{display:flex;gap:8px;}
+.ans-single-q{color:var(--muted);font-weight:500;min-width:115px;}
+.ans-single-v{color:var(--dark);font-weight:600;}
+.ans-table-block{margin-bottom:12px;}
+.ans-table-title{font-size:12px;font-weight:700;color:var(--purple-deep);margin-bottom:6px;}
+.ans-mini-table{width:100%;border-collapse:collapse;font-size:11.5px;}
+.ans-mini-table th{background:#f3f0ff;color:var(--purple-deep);font-weight:600;padding:6px 8px;text-align:left;border:1px solid var(--border);}
+.ans-mini-table td{padding:5px 8px;border:1px solid var(--border);}
+.ans-mini-table tr:nth-child(odd) td{background:#fafafa;}
+.ans-no-data{color:var(--muted);font-style:italic;font-size:12px;padding:4px 0;}
+.ans-summary{font-size:12px;color:var(--muted);margin-bottom:12px;}
+
 /* 토스트 */
 .toast{position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 22px;border-radius:10px;z-index:1000;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px);}
@@ -213,6 +233,7 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
   <button class="tab-btn" data-tab="tab-slots">🩷 담당자 & 슬롯</button>
   <button class="tab-btn" data-tab="tab-assign">🩷 배정</button>
   <button class="tab-btn" data-tab="tab-result">🩷 결과 출력 <span class="tab-badge" id="badgeResult" style="display:none">0</span></button>
+  <button class="tab-btn" data-tab="tab-answers">🩷 답변 조회</button>
 </nav>
 
 <div class="main">
@@ -358,6 +379,34 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
   </div>
 </div>
 
+<!-- ===== TAB 5: 답변 조회 ===== -->
+<div class="tab-panel" id="tab-answers">
+  <div class="card">
+    <div class="card-title">🩷 학생 답변 조회</div>
+    <div class="flex gap-12" style="flex-wrap:wrap;align-items:flex-end;">
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">반 선택</label>
+        <select id="ansClassFilter" onchange="renderAnswers()" style="min-width:160px;">
+          <option value="">전체 반</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">정렬</label>
+        <select id="ansSort" onchange="renderAnswers()">
+          <option value="name">이름순</option>
+          <option value="sid">학번순</option>
+        </select>
+      </div>
+      <div style="flex:1;text-align:right;">
+        <button class="btn btn-ghost btn-sm" onclick="printAnswers()">📄 선택 반 인쇄</button>
+      </div>
+    </div>
+  </div>
+  <div id="answersWrap">
+    <div class="empty-state card"><div class="icon">🩷</div><p>학생을 업로드하고 반을 선택해주세요</p></div>
+  </div>
+</div>
+
 </div><!-- /main -->
 
 <!-- 개별 추가 모달 -->
@@ -446,8 +495,41 @@ function extractFormData(row){
   const fd = {past:[], plan:[]};      // past[0..5] = 1차~6차, plan[0..5] = 1순위~6순위
   for(let i=0;i<6;i++){ fd.past.push({}); fd.plan.push({}); }
 
-  // 연도별 표 데이터 수집 (작은 연도 = 작년결과, 큰 연도 = 올해희망)
-  const yearMap = {};   // {year: [{slot, field, value}, ...]}
+  // 올해(2026) 새 양식 자동 감지: Q1, Q2, ... Q84 형태의 헤더면 인덱스 기반 매핑
+  const keys = Object.keys(row);
+  const qKeys = keys.filter(k => /^Q\d+$/.test(String(k).trim()));
+  const isQNumbered = qKeys.length >= 80;  // Q번호 80개 이상이면 새 양식
+  if(isQNumbered){
+    const get = (q) => {
+      const v = row['Q'+q];
+      return (v===undefined||v===null) ? '' : String(v).trim();
+    };
+    // 단일값 (Q1~Q4)
+    fd.apply = get(1);          // 수시지원여부
+    fd.type = get(2);           // 수시지원유형
+    fd.needCons = get(3);       // 컨설팅 필요
+    fd.essayKind = get(4);      // 논술 종류
+    // 작년결과: 1차 Q5(지원여부, 무시)+Q6-Q14, 2차 Q15-Q23, ... 6차 Q51-Q59
+    for(let cha = 1; cha <= 6; cha++){
+      const startQ = cha === 1 ? 6 : (15 + 9*(cha-2));
+      for(let f = 0; f < 9; f++){
+        fd.past[cha-1][PAST_FIELDS[f]] = get(startQ + f);
+      }
+    }
+    // 올해희망: 1순위 Q60(지원여부, 무시)+Q61-Q64, 2순위 Q65-Q68, ... 6순위 Q81-Q84
+    for(let sun = 1; sun <= 6; sun++){
+      const startQ = sun === 1 ? 61 : (65 + 4*(sun-2));
+      for(let f = 0; f < 4; f++){
+        fd.plan[sun-1][PLAN_FIELDS[f]] = get(startQ + f);
+      }
+    }
+    fd.pastYear = LAST_GRADE;
+    fd.planYear = CURRENT_GRADE;
+    return fd;
+  }
+
+  // 작년(.xls) 양식: 헤더에 연도+슬롯이 포함된 의미있는 텍스트 (기존 휴리스틱)
+  const yearMap = {};
   const yearRe = /(\d{4})\s+([1-6])-([1-9])/;
   for(const [k,v] of Object.entries(row)){
     const m = String(k).match(yearRe);
@@ -607,6 +689,7 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
     if(btn.dataset.tab==='tab-slots')renderSlots();
     if(btn.dataset.tab==='tab-assign')updateStats();
     if(btn.dataset.tab==='tab-result')renderResult();
+    if(btn.dataset.tab==='tab-answers')renderAnswers();
   });
 });
 
@@ -1306,6 +1389,154 @@ function renderResult(){
   }
 
   wrap.innerHTML=html;
+}
+
+// ============================================================
+// TAB 5: 답변 조회 — 반별로 학생 답변(매핑된 질문) 확인
+// ============================================================
+function renderAnswers(){
+  // 반 드롭다운 옵션 동적 채움 (학생관리 탭 들어오기 전엔 비어있음)
+  const sel = document.getElementById('ansClassFilter');
+  const currentVal = sel.value;
+  const allClasses = [...new Set(targetList.map(s => s.classCode).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">전체 반</option>' +
+    allClasses.map(c => `<option value="${c}"${c===currentVal?' selected':''}>${c}</option>`).join('');
+
+  const wrap = document.getElementById('answersWrap');
+  if(!targetList.length){
+    wrap.innerHTML = '<div class="empty-state card"><div class="icon">🩷</div><p>학생을 업로드하고 반을 선택해주세요</p></div>';
+    return;
+  }
+
+  const filterClass = sel.value;
+  const sortMode = document.getElementById('ansSort').value;
+  let students = filterClass ? targetList.filter(s => s.classCode === filterClass) : [...targetList];
+  if(sortMode === 'sid') students.sort((a,b) => String(a.sid).localeCompare(String(b.sid)));
+  else students.sort((a,b) => a.name.localeCompare(b.name, 'ko'));
+
+  if(!students.length){
+    wrap.innerHTML = `<div class="card ans-summary">${filterClass||'전체'} 반에 학생이 없습니다.</div>`;
+    return;
+  }
+
+  const py = students.find(s => s.formData?.pastYear)?.formData?.pastYear || LAST_GRADE;
+  const ply = students.find(s => s.formData?.planYear)?.formData?.planYear || CURRENT_GRADE;
+
+  let html = `<div class="ans-summary card">📋 ${filterClass||'전체'} 반 · 총 <b>${students.length}명</b></div>`;
+
+  for(const s of students){
+    const fd = s.formData || {};
+    html += `<div class="ans-card">
+      <div class="ans-header">
+        <span class="ans-sid">${_esc(s.sid)}</span>
+        <span class="ans-name">${_esc(s.name)}</span>
+        <span class="ans-class">${_esc(s.classCode||'-')}</span>
+        <span class="ans-mm">마이맥 ${_esc(s.maymac)}</span>
+      </div>
+      <div class="ans-single-grid">
+        <div class="ans-single-row"><span class="ans-single-q">수시지원여부</span><span class="ans-single-v">${_esc(fd.apply||'-')}</span></div>
+        <div class="ans-single-row"><span class="ans-single-q">수시지원유형</span><span class="ans-single-v">${_esc(fd.type||'-')}</span></div>
+        <div class="ans-single-row"><span class="ans-single-q">컨설팅필요</span><span class="ans-single-v">${_esc(fd.needCons||'-')}</span></div>
+        <div class="ans-single-row"><span class="ans-single-q">논술종류</span><span class="ans-single-v">${_esc(fd.essayKind||'-')}</span></div>
+      </div>`;
+
+    // 작년 결과
+    const pastFilled = (fd.past||[]).map((p, i) => ({...p, _idx:i+1})).filter(p => Object.values(p).some(v => v && String(v).trim() && v !== p._idx));
+    html += `<div class="ans-table-block"><div class="ans-table-title">📋 ${py}학년도 작년 결과</div>`;
+    if(pastFilled.length){
+      html += `<table class="ans-mini-table"><thead><tr><th>차수</th><th>학교</th><th>학과</th><th>구분</th><th>전형명</th><th>내신</th><th>지원형태</th><th>1단계</th><th>최종</th><th>예비</th></tr></thead><tbody>`;
+      for(const p of pastFilled){
+        html += `<tr><td><b>${p._idx}차</b></td>${PAST_FIELDS.map(f => `<td>${_esc(p[f]||'')}</td>`).join('')}</tr>`;
+      }
+      html += `</tbody></table>`;
+    } else {
+      html += `<div class="ans-no-data">작성 내용 없음</div>`;
+    }
+    html += `</div>`;
+
+    // 올해 희망
+    const planFilled = (fd.plan||[]).map((p, i) => ({...p, _idx:i+1})).filter(p => Object.values(p).some(v => v && String(v).trim() && v !== p._idx));
+    html += `<div class="ans-table-block"><div class="ans-table-title">🎯 ${ply}학년도 올해 희망</div>`;
+    if(planFilled.length){
+      html += `<table class="ans-mini-table"><thead><tr><th>순위</th><th>학교</th><th>학과</th><th>구분</th><th>전형명</th></tr></thead><tbody>`;
+      for(const p of planFilled){
+        html += `<tr><td><b>${p._idx}순위</b></td>${PLAN_FIELDS.map(f => `<td>${_esc(p[f]||'')}</td>`).join('')}</tr>`;
+      }
+      html += `</tbody></table>`;
+    } else {
+      html += `<div class="ans-no-data">작성 내용 없음</div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  wrap.innerHTML = html;
+}
+
+// 선택 반의 답변을 한 페이지에 인쇄 (B5 요약 형태)
+function printAnswers(){
+  const sel = document.getElementById('ansClassFilter');
+  const filterClass = sel.value;
+  const sortMode = document.getElementById('ansSort').value;
+  let students = filterClass ? targetList.filter(s => s.classCode === filterClass) : [...targetList];
+  if(!students.length){alert('표시할 학생이 없습니다.');return;}
+  if(sortMode === 'sid') students.sort((a,b) => String(a.sid).localeCompare(String(b.sid)));
+  else students.sort((a,b) => a.name.localeCompare(b.name, 'ko'));
+
+  const py = students.find(s => s.formData?.pastYear)?.formData?.pastYear || LAST_GRADE;
+  const ply = students.find(s => s.formData?.planYear)?.formData?.planYear || CURRENT_GRADE;
+
+  const w = window.open('','_blank');
+  let body = '';
+  for(const s of students){
+    const fd = s.formData || {};
+    const pastFilled = (fd.past||[]).map((p, i) => ({...p, _idx:i+1})).filter(p => Object.values(p).some(v => v && String(v).trim() && v !== p._idx));
+    const planFilled = (fd.plan||[]).map((p, i) => ({...p, _idx:i+1})).filter(p => Object.values(p).some(v => v && String(v).trim() && v !== p._idx));
+    body += `<div class="card">
+      <div class="hdr">
+        <span class="sid">${_esc(s.sid)}</span>
+        <span class="name">${_esc(s.name)}</span>
+        <span class="cls">${_esc(s.classCode||'-')}</span>
+        <span class="mm">마이맥 ${_esc(s.maymac)}</span>
+      </div>
+      <div class="single">
+        <span><b>수시지원:</b> ${_esc(fd.apply||'-')}</span>
+        <span><b>유형:</b> ${_esc(fd.type||'-')}</span>
+        <span><b>컨설팅:</b> ${_esc(fd.needCons||'-')}</span>
+        <span><b>논술:</b> ${_esc(fd.essayKind||'-')}</span>
+      </div>
+      <div class="ttl">📋 ${py}학년도 작년 결과</div>
+      ${pastFilled.length ? `<table><thead><tr><th>차수</th><th>학교</th><th>학과</th><th>구분</th><th>전형명</th><th>내신</th><th>지원형태</th><th>1단계</th><th>최종</th><th>예비</th></tr></thead><tbody>${pastFilled.map(p => `<tr><td>${p._idx}차</td>${PAST_FIELDS.map(f => `<td>${_esc(p[f]||'')}</td>`).join('')}</tr>`).join('')}</tbody></table>` : `<div class="nd">작성 내용 없음</div>`}
+      <div class="ttl">🎯 ${ply}학년도 올해 희망</div>
+      ${planFilled.length ? `<table><thead><tr><th>순위</th><th>학교</th><th>학과</th><th>구분</th><th>전형명</th></tr></thead><tbody>${planFilled.map(p => `<tr><td>${p._idx}순위</td>${PLAN_FIELDS.map(f => `<td>${_esc(p[f]||'')}</td>`).join('')}</tr>`).join('')}</tbody></table>` : `<div class="nd">작성 내용 없음</div>`}
+    </div>`;
+  }
+
+  w.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"><title>학생 답변 ${filterClass||'전체'}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+  @page{size:A4;margin:10mm;}
+  body{font-family:'Noto Sans KR',sans-serif;color:#3D3660;font-size:10pt;line-height:1.5;margin:0;padding:0;}
+  .header{font-size:14pt;font-weight:700;text-align:center;margin-bottom:10pt;padding-bottom:6pt;border-bottom:2px solid #BFBAFC;}
+  .card{border:1px solid #D4D6FC;border-radius:8px;padding:10pt 12pt;margin-bottom:8pt;page-break-inside:avoid;background:#fff;}
+  .hdr{display:flex;align-items:baseline;gap:8pt;padding-bottom:5pt;border-bottom:1px solid #ddd;margin-bottom:6pt;}
+  .hdr .sid{font-weight:600;color:#888;font-size:9pt;}
+  .hdr .name{font-size:12pt;font-weight:700;}
+  .hdr .cls,.hdr .mm{background:#D4D6FC;padding:2pt 6pt;border-radius:5pt;font-size:9pt;font-weight:600;}
+  .single{display:flex;gap:14pt;font-size:9.5pt;margin-bottom:6pt;flex-wrap:wrap;}
+  .single b{color:#6a52a8;}
+  .ttl{font-size:9.5pt;font-weight:700;color:#6a52a8;margin:6pt 0 4pt;}
+  table{width:100%;border-collapse:collapse;font-size:9pt;}
+  th{background:#F3F0FF;color:#6a52a8;font-weight:600;padding:3pt 5pt;border:1px solid #D4D6FC;text-align:left;}
+  td{padding:3pt 5pt;border:1px solid #D4D6FC;}
+  tr:nth-child(odd) td{background:#fafafa;}
+  .nd{font-style:italic;color:#999;font-size:9pt;padding:2pt 0;}
+  </style></head><body>
+  <div class="header">학생 답변 조회 — ${filterClass||'전체 반'} (${students.length}명)</div>
+  ${body}
+  <script>setTimeout(()=>window.print(),300);<\/script>
+  </body></html>`);
+  w.document.close();
 }
 
 // 공통 클립보드 복사 헬퍼
