@@ -643,7 +643,7 @@ function parseTime(v){v=String(v).replace(/\D/g,'');if(v.length===3)v='0'+v;if(v
 function getWd(dateStr){return['일','월','화','수','목','금','토'][new Date(dateStr).getDay()];}
 function uuid(){return Math.random().toString(36).substr(2,9);}
 function getClassCode(반,그룹){return 반&&그룹?String(반).trim()+String(그룹).trim():String(반||'').trim();}
-function getMM(classCode){return MM_TABLE[classCode]||{t:'',m:'?'};}
+function getMM(classCode){return MM_TABLE[classCode]||{t:'',m:'#N/A'};}
 
 // buildBusy: master.subjects([{subj,group,combo}, ...])로부터 시간 블록 생성
 // 한 키에 여러 시간(주 2회 수업 등)을 배열로 등록 가능
@@ -777,7 +777,7 @@ function loadMaster(file){
       if(!master) return;
       const classCode = getClassCode(master['반'], master['그룹']);
       const newBusy = buildBusy(master);
-      if(!s.classCode || s.maymac === '?' || !s.busy || s.busy.length === 0){
+      if(!s.classCode || s.maymac === '?' || s.maymac === '확인필요' || s.maymac === '#N/A' || !s.busy || s.busy.length === 0){
         s.classCode = classCode;
         s.maymac = getMM(classCode).m;
         s.busy = newBusy;
