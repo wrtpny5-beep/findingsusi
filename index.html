@@ -625,6 +625,8 @@ function save(){
 }
 function load(){
   try{consultants=JSON.parse(localStorage.getItem('qs_cons'))||[];}catch{consultants=[];}
+  // 기존 데이터 호환: maxPerDay 필드 없으면 8로 기본값 채움
+  consultants.forEach(c => { if(c.maxPerDay === undefined) c.maxPerDay = 8; });
   try{assignments=JSON.parse(localStorage.getItem('qs_asgn'))||{};}catch{assignments={};}
   try{targetList=JSON.parse(localStorage.getItem('qs_target'))||[];}catch{targetList=[];}
   try{masterMap=JSON.parse(localStorage.getItem('qs_master'))||{};}catch{masterMap={};}
@@ -997,7 +999,7 @@ function resetAll(){
 
   // 기본 담당자 4명 복원
   ['고은 원장님','정우성 팀장님','유명환 센터장님','김홍훈 선생님'].forEach(name=>{
-    consultants.push({id:uuid(),name,template:[],dates:[]});
+    consultants.push({id:uuid(),name,template:[],dates:[],maxPerDay:8});
   });
   save();
 
@@ -1032,7 +1034,7 @@ function addStudentManual(){
 // TAB 2: 담당자 & 슬롯
 // ============================================================
 function addConsultant(){
-  consultants.push({id:uuid(),name:'새 담당자',template:[],dates:[]});
+  consultants.push({id:uuid(),name:'새 담당자',template:[],dates:[],maxPerDay:8});
   save();renderSlots();
 }
 function removeConsultant(id){
@@ -1042,6 +1044,13 @@ function removeConsultant(id){
   save();renderSlots();updateStats();
 }
 function updateCName(id,v){const c=consultants.find(x=>x.id===id);if(c){c.name=v;save();}}
+function updateMaxPerDay(id,v){
+  const c=consultants.find(x=>x.id===id);
+  if(!c)return;
+  const n=parseInt(v);
+  c.maxPerDay = (isNaN(n)||n<1)?8:n;
+  save();
+}
 
 function addTpl(cid){
   const c=consultants.find(x=>x.id===cid);if(!c)return;
@@ -1125,6 +1134,10 @@ function renderSlots(){
         </div>
         <div class="flex items-center gap-8">
           <span class="pill pill-info">${dates.length}일 · ${totalT}타임 · ${doneN}명 배정</span>
+          <span class="text-sm text-muted" style="font-weight:500;">하루 최대</span>
+          <input type="number" min="1" max="50" value="${c.maxPerDay??8}" onchange="updateMaxPerDay('${c.id}',this.value)"
+            style="width:54px;text-align:center;font-size:13px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;">
+          <span class="text-sm text-muted">명</span>
           <button class="btn btn-danger btn-sm" onclick="removeConsultant('${c.id}')">🩷 삭제</button>
         </div>
       </div>
@@ -1246,6 +1259,11 @@ function _runAssign(){
   let doneN=0,failN=0;
   const failList=[];
 
+  // 담당자-날짜별 배정 카운트 추적 (Map: "cid|date" → count)
+  const dayCount = new Map();
+  const maxPerDayMap = new Map();  // cid → maxPerDay
+  consultants.forEach(c => maxPerDayMap.set(c.id, c.maxPerDay ?? 8));
+
   // 전체 슬롯을 이른 날짜·시간 순으로 정렬 (한 번만)
   const sortedAllSlots = [...allSlots].sort((a,b) =>
     a.date.localeCompare(b.date) || a.st.localeCompare(b.st)
@@ -1256,9 +1274,16 @@ function _runAssign(){
     // 사용 안 된 슬롯 중에서 시간충돌 없는 가장 이른 슬롯에 배정
     for(const slot of sortedAllSlots){
       if(usedSlots.has(slot.tid))continue;
+      // 담당자-날짜 한도 체크
+      const dayKey = `${slot.cid}|${slot.date}`;
+      const curCount = dayCount.get(dayKey) || 0;
+      const maxAllowed = maxPerDayMap.get(slot.cid) ?? 8;
+      if(curCount >= maxAllowed) continue;
       if(!isConflict(student.busy||[],slot.date,slot.st,slot.et)){
         assignments[idx]={consultantId:slot.cid,consultantName:slot.cname,dateId:slot.did,timeId:slot.tid,date:slot.date,startTime:slot.st,endTime:slot.et};
-        usedSlots.add(slot.tid);doneN++;ok=true;break;
+        usedSlots.add(slot.tid);
+        dayCount.set(dayKey, curCount + 1);
+        doneN++;ok=true;break;
       }
     }
     if(!ok){
@@ -2133,7 +2158,7 @@ load();
 // 담당자 없으면 기본 4명
 if(!consultants.length){
   ['고은 원장님','정우성 팀장님','유명환 센터장님','김홍훈 선생님'].forEach(name=>{
-    consultants.push({id:uuid(),name,template:[],dates:[]});
+    consultants.push({id:uuid(),name,template:[],dates:[],maxPerDay:8});
   });
   save();
 }
