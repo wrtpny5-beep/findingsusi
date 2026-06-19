@@ -136,6 +136,12 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
 .date-group table th{background:var(--purple-deep);color:#fff;font-size:12px;padding:8px 10px;text-align:left;white-space:nowrap;}
 .date-group table td{padding:8px 10px;border-bottom:1px solid var(--border);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .date-group table td.cell-name{white-space:normal;word-break:keep-all;}
+.pill-mini-warn{
+  display:inline-block;font-size:10px;font-weight:600;
+  background:#FFE5E5;color:#C0392B;
+  padding:1px 6px;border-radius:6px;margin-left:4px;
+  vertical-align:middle;letter-spacing:-0.3px;
+}
 .date-group table tr:last-child td{border-bottom:none;}
 /* 시간충돌 검증 상태 표시 */
 .date-group table tr.s-ok td:first-child{border-left:3px solid #4caf50;}
@@ -829,13 +835,18 @@ function loadSurvey(file){
       const name=String(row['이름']||'').trim();
       if(!sid||!name){skipped++;return;}
 
+      // 생기부 제출 여부 (빈값이면 미제출, 뭐든 적혀있으면 제출)
+      const submittedRaw = String(row['생기부 제출']||'').trim();
+      const submitted = submittedRaw.length > 0;
+
       // 양식 데이터 추출
       const formData = extractFormData(row);
 
-      // 이미 있는 학생이면 formData만 업데이트
+      // 이미 있는 학생이면 formData + submitted만 업데이트
       if(existSidsMap.has(sid)){
         const idx = existSidsMap.get(sid);
         targetList[idx].formData = formData;
+        targetList[idx].submitted = submitted;
         updated++;
         return;
       }
@@ -847,7 +858,7 @@ function loadSurvey(file){
       const classCode=getClassCode(반,그룹);
       const busy=master?buildBusy(master):[];
 
-      targetList.push({sid,name,classCode,maymac:getMM(classCode).m,busy,source:'survey',formData});
+      targetList.push({sid,name,classCode,maymac:getMM(classCode).m,busy,source:'survey',formData,submitted});
       existSidsMap.set(sid, targetList.length-1);
       added++;
     });
@@ -1254,6 +1265,9 @@ function _runAssign(){
     const j=Math.floor(Math.random()*(i+1));
     [sorted[i],sorted[j]]=[sorted[j],sorted[i]];
   }
+  // 생기부 제출자 우선: 셔플 후 안정 정렬로 제출자(true)가 앞으로
+  // (각 그룹 내부는 셔플된 무작위 순서 유지)
+  sorted.sort((a,b) => (b[1].submitted?1:0) - (a[1].submitted?1:0));
 
   const usedSlots=new Set();
   let doneN=0,failN=0;
@@ -1381,7 +1395,7 @@ function renderResult(){
             <td><span class="mm-badge">${r.s.maymac}</span></td>
             <td>${r.s.classCode||'-'}</td>
             <td class="font-mono">${r.s.sid}</td>
-            <td class="cell-name">${r.s.name}${r.s.formData?'':' <span class="text-muted" style="font-size:11px">⚠ 양식없음</span>'}</td>
+            <td class="cell-name">${r.s.name}${r.s.submitted===false?' <span class="pill-mini-warn">📎 미제출</span>':''}${r.s.formData?'':' <span class="text-muted" style="font-size:11px">⚠ 양식없음</span>'}</td>
             <td style="text-align:center;white-space:nowrap;">
               <button class="btn-copy-sm" onclick="copyStudent(${r.idx})" title="셀 값 복사">📋</button>
               <button class="btn-copy-sm" onclick="printAnnouncement(${r.idx})" title="안내문 출력">📨</button>
@@ -1411,7 +1425,7 @@ function renderResult(){
             <td><span class="mm-badge">${r.s.maymac}</span></td>
             <td>${r.s.classCode||'-'}</td>
             <td class="font-mono">${r.s.sid}</td>
-            <td class="cell-name">${r.s.name}</td>
+            <td class="cell-name">${r.s.name}${r.s.submitted===false?' <span class="pill-mini-warn">📎 미제출</span>':''}</td>
             <td>${r.s.source==='survey'?'수시지원':'개별추가'}</td>
           </tr>`).join('')}</tbody>
         </table>
