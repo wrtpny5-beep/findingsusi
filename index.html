@@ -783,20 +783,13 @@ function loadMaster(file){
     targetList.forEach(s => {
       const master = masterMap[s.sid];
       if(!master) return;
+      // 마스터에 있는 학생은 무조건 최신 마스터 기준으로 재계산
+      // (이전 버그/시간표 누락/SCHEDULE 추가 등에 영향 받은 옛 데이터 강제 갱신)
       const classCode = getClassCode(master['반'], master['그룹']);
-      const newBusy = buildBusy(master);
-      if(!s.classCode || s.maymac === '?' || s.maymac === '확인필요' || s.maymac === '#N/A' || !s.busy || s.busy.length === 0){
-        s.classCode = classCode;
-        s.maymac = getMM(classCode).m;
-        s.busy = newBusy;
-        backfilled++;
-      } else if(newBusy.length > (s.busy?.length||0)){
-        // 새 buildBusy가 더 많은 시간 블록을 찾았다면 갱신 (이전 버그 영향 받은 데이터 보강)
-        s.busy = newBusy;
-        s.classCode = classCode;
-        s.maymac = getMM(classCode).m;
-        backfilled++;
-      }
+      s.classCode = classCode;
+      s.maymac = getMM(classCode).m;
+      s.busy = buildBusy(master);
+      backfilled++;
     });
 
     save();
