@@ -182,7 +182,7 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
   transition:transform 0.15s ease, box-shadow 0.15s ease;
 }
 .fab-settings:hover{
-  transform:translateY(-2px) rotate(45deg);
+  transform:translateY(-3px) scale(1.08);
   box-shadow:0 6px 20px rgba(106,82,168,0.45);
 }
 .fab-settings:active{transform:translateY(0);}
@@ -373,10 +373,12 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
     <div class="settings-title">📱 발송문자 설정</div>
     <div class="settings-row settings-row-block">
       <label for="set-sms">SMS 본문 템플릿</label>
-      <textarea id="set-sms" rows="10" oninput="saveSettingsField('smsTemplate', this.value)" placeholder="예: [QUETTA] {이름} 학생 학부모님께, {날짜} {시간}에 수시 상담이 예정되어 있습니다..."></textarea>
+      <textarea id="set-sms" rows="10" oninput="saveSettingsField('smsTemplate', this.value)" placeholder="예: [QUETTA] {필드1} 학생 학부모님께, {필드3} {필드4}에 수시 상담이..."></textarea>
     </div>
     <div class="settings-desc">
-      <b>치환 변수</b>: <code>{이름}</code>, <code>{학번}</code>, <code>{날짜}</code>, <code>{시간}</code>, <code>{담당자}</code>, <code>{장소}</code>, <code>{상담유형}</code> (배정 명단 export 시 자동 치환)<br>
+      <b>치환 변수 (학원 SMS 웹 import 형식)</b><br>
+      <code>{필드1}</code>=학생이름 · <code>{필드2}</code>=학번 · <code>{필드3}</code>=상담일자 · <code>{필드4}</code>=상담시간<br>
+      <span style="color:var(--muted);font-size:10.5px;">※ 1열 전화번호(보호자HP)는 학원 SMS 웹에서 자동 인식되므로 본문 변수에 포함하지 않습니다.</span><br>
       <button class="btn-restore" style="margin-top:8px;font-size:11px;padding:5px 10px;" onclick="resetSmsTemplate()">↺ 템플릿 기본값</button>
       <button class="btn-restore" style="margin-top:8px;font-size:11px;padding:5px 10px;margin-left:6px;" onclick="copySmsPreview()">📋 미리보기 복사 (첫 학생 기준)</button>
     </div>
@@ -406,7 +408,7 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
 </div>
 
 <!-- 우하단 플로팅 설정 버튼 -->
-<button id="fab-settings" class="fab-settings" onclick="openSettings()" title="설정">⚙</button>
+<button id="fab-settings" class="fab-settings" onclick="openSettings()" title="설정">🩷</button>
 
 <!-- ===== TAB 2: 담당자 & 슬롯 ===== -->
 <div class="tab-panel" id="tab-slots">
@@ -683,12 +685,10 @@ const DEFAULT_ANNOUNCEMENT_BODY = `**1. 상담 전 준비할 것**
 
 const DEFAULT_SMS_TEMPLATE = `[QUETTA] 수시 상담 안내
 
-{이름} 학생 학부모님께,
+{필드1} 학생 학부모님께,
 
-{날짜} {시간}에 {담당자} 선생님과 수시 {상담유형} 상담이 예정되어 있습니다.
-
-상담 장소: {장소}
-학생 학번: {학번}
+{필드3} {필드4}에 수시 상담이 예정되어 있습니다.
+(학번: {필드2})
 
 문의는 행정실로 부탁드립니다.
 
@@ -1547,6 +1547,7 @@ function renderResult(){
           <div class="flex gap-8">
             <button class="btn-copy-list" onclick="copyDateList('${date}')">📋 명단 복사</button>
             <button class="btn-copy-list" onclick="printDateAnnouncements('${date}')" style="border-color:var(--rose);color:var(--purple-deep)">📨 안내문 일괄</button>
+            <button class="btn-copy-list" onclick="exportSmsList([${idxList.join(',')}],'${date}')" style="border-color:var(--lavender);color:var(--purple-deep)">📱 SMS 다운</button>
             <button class="btn-print-bulk" onclick="printForms([${idxList.join(',')}])">📄 ${date} 전체 양식 출력</button>
           </div>
         </div>
@@ -1809,6 +1810,35 @@ function copyStudent(idx){
   copyToClipboard(text)
     .then(()=>showToast(`📋 ${s.name} 복사됨`))
     .catch(()=>showToast('복사 실패'));
+}
+
+// 날짜별 SMS 발송용 엑셀 다운로드 (보호자HP / 이름 / 학번 / 일자 / 시간 — 5컬럼)
+function exportSmsList(idxList, date){
+  if(!idxList || !idxList.length){alert('내보낼 학생이 없습니다.');return;}
+  const pairs = idxList.map(i => ({s: targetList[i], a: assignments[i]}))
+    .filter(p => p.s && p.a);
+  if(!pairs.length){alert('내보낼 학생이 없습니다.');return;}
+
+  // 시간순 정렬
+  pairs.sort((a,b) => a.a.startTime.localeCompare(b.a.startTime));
+
+  const rows = [['보호자HP','학생이름','학번','상담일자','상담시간']];
+  pairs.forEach(p => {
+    const master = masterMap[p.s.sid] || {};
+    rows.push([
+      master.보호자HP || '',
+      p.s.name,
+      p.s.sid,
+      p.a.date,
+      `${p.a.startTime}~${p.a.endTime}`
+    ]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:15},{wch:10},{wch:8},{wch:12},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'SMS발송');
+  XLSX.writeFile(wb, `SMS발송_${date}.xlsx`);
 }
 
 // 날짜별 학생 명단 복사: 시간순으로 셀 값을 줄별 나열
@@ -2175,13 +2205,10 @@ function copySmsPreview(){
   if(!s || !a){alert('미리보기용 학생 정보를 찾을 수 없습니다.');return;}
 
   const text = (settings.smsTemplate || '')
-    .replace(/\{이름\}/g, s.name||'')
-    .replace(/\{학번\}/g, s.sid||'')
-    .replace(/\{날짜\}/g, a.date||'')
-    .replace(/\{시간\}/g, `${a.startTime||''}~${a.endTime||''}`)
-    .replace(/\{담당자\}/g, a.consultantName||'')
-    .replace(/\{장소\}/g, settings.location||'')
-    .replace(/\{상담유형\}/g, settings.consultType||'');
+    .replace(/\{필드1\}/g, s.name||'')
+    .replace(/\{필드2\}/g, s.sid||'')
+    .replace(/\{필드3\}/g, a.date||'')
+    .replace(/\{필드4\}/g, `${a.startTime||''}~${a.endTime||''}`);
 
   navigator.clipboard.writeText(text).then(()=>{
     showToast(`📋 미리보기 복사 (${s.name} 기준)`);
