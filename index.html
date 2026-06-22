@@ -142,6 +142,34 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
   padding:1px 6px;border-radius:6px;margin-left:4px;
   vertical-align:middle;letter-spacing:-0.3px;
 }
+.conflict-reason{
+  font-size:10.5px;color:#C0392B;font-weight:500;
+  margin-top:3px;letter-spacing:-0.3px;line-height:1.4;
+}
+
+/* 시간충돌 경고 배너 */
+.conflict-banner{
+  display:flex;align-items:center;gap:14px;
+  background:linear-gradient(135deg, #FFE5E5 0%, #FFD0D0 100%);
+  border:1px solid #FFB3B3;border-radius:12px;
+  padding:14px 18px;margin-bottom:16px;
+  box-shadow:0 2px 8px rgba(192,57,43,0.08);
+}
+.conflict-banner .cb-icon{font-size:24px;flex-shrink:0;}
+.conflict-banner .cb-text{flex:1;}
+.conflict-banner .cb-title{font-size:14px;font-weight:700;color:#A6231C;letter-spacing:-0.3px;}
+.conflict-banner .cb-title span{font-size:16px;color:#C0392B;}
+.conflict-banner .cb-sub{font-size:11.5px;color:#8B1F1F;margin-top:3px;opacity:0.85;}
+.conflict-banner .cb-action{
+  background:#C0392B;color:#fff;border:none;border-radius:8px;
+  padding:8px 14px;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0;
+}
+.conflict-banner .cb-action:hover{background:#A6231C;}
+.conflict-banner .cb-close{
+  background:transparent;border:none;color:#A6231C;font-size:20px;cursor:pointer;
+  padding:4px 8px;line-height:1;flex-shrink:0;
+}
+.conflict-banner .cb-close:hover{color:#7B1818;}
 .date-group table tr:last-child td{border-bottom:none;}
 /* 시간충돌 검증 상태 표시 */
 .date-group table tr.s-ok td:first-child{border-left:3px solid #4caf50;}
@@ -243,6 +271,17 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
 </nav>
 
 <div class="main">
+
+<!-- 시간충돌 경고 배너 (마스터 변경 시 자동 표시) -->
+<div id="conflictBanner" class="conflict-banner" style="display:none;">
+  <div class="cb-icon">⚠</div>
+  <div class="cb-text">
+    <div class="cb-title"><span id="cbCount">0</span>명의 학생이 이미 배정된 상담 시간과 충돌합니다</div>
+    <div class="cb-sub">마스터 갱신 후 수업 시간이 변경된 학생일 가능성이 큽니다.</div>
+  </div>
+  <button class="cb-action" onclick="goToConflicts()">결과탭에서 확인 →</button>
+  <button class="cb-close" onclick="dismissConflictBanner()" title="닫기">×</button>
+</div>
 
 <!-- ===== TAB 1: 학생 관리 ===== -->
 <div class="tab-panel active" id="tab-students">
@@ -375,6 +414,7 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
       <option value="">전체</option>
       <option value="done">배정 완료</option>
       <option value="none">미배정</option>
+      <option value="conflict">⚠ 시간충돌만</option>
     </select>
     <button class="btn btn-ghost btn-sm" onclick="exportList()">🩷 배정 목록 엑셀</button>
     <button class="btn btn-ghost btn-sm" onclick="previewSampleAnnouncement()" style="margin-left:auto;">📨 안내문 미리보기</button>
@@ -678,16 +718,65 @@ function buildBusy(master){
       for(const sc of schedList){
         const ps=sc.periods;
         const ts=PERIOD_TIME[Math.min(...ps)],te=PERIOD_TIME[Math.max(...ps)];
-        if(ts&&te)blocks.push({day:sc.day,s:ts.s,e:te.e});
+        if(ts&&te)blocks.push({day:sc.day,s:ts.s,e:te.e,subj:ss[i]||ss[0],group:gs[i]});
       }
     }
   }
   return blocks;
 }
 
+// 시간충돌 경고 배너 갱신
+function updateConflictBanner(){
+  const conflicts = (typeof detectAllConflicts === 'function') ? detectAllConflicts() : [];
+  const banner = document.getElementById('conflictBanner');
+  if(!banner) return;
+  if(conflicts.length && !banner.dataset.dismissed){
+    document.getElementById('cbCount').textContent = conflicts.length;
+    banner.style.display = 'flex';
+  } else {
+    banner.style.display = 'none';
+  }
+}
+function dismissConflictBanner(){
+  const banner = document.getElementById('conflictBanner');
+  banner.dataset.dismissed = '1';
+  banner.style.display = 'none';
+}
+function goToConflicts(){
+  // 결과탭으로 이동 + 충돌만 필터
+  document.querySelector('[data-tab="tab-result"]').click();
+  setTimeout(()=>{
+    const f = document.getElementById('fStatus');
+    if(f){ f.value='conflict'; if(typeof renderResult==='function') renderResult(); }
+  }, 100);
+}
+
 function isConflict(busy,dateStr,st,et){
   const wd=getWd(dateStr),s=toMin(st),e=toMin(et);
   return busy.some(b=>b.day===wd&&b.s<e&&b.e>s);
+}
+
+// 어떤 busy 블록이 충돌하는지 모두 반환 (사유 표시용)
+function findConflictingBlocks(busy,dateStr,st,et){
+  if(!busy)return [];
+  const wd=getWd(dateStr),s=toMin(st),e=toMin(et);
+  return busy.filter(b=>b.day===wd&&b.s<e&&b.e>s);
+}
+
+// 현재 배정 전체에서 시간충돌 학생 목록 검출
+// 반환: [{idx, sid, name, date, st, et, blocks:[{day,s,e}]}]
+function detectAllConflicts(){
+  const out = [];
+  Object.entries(assignments).forEach(([k,a]) => {
+    const idx = parseInt(k);
+    const s = targetList[idx];
+    if(!s || !s.busy || !s.busy.length) return;
+    const blocks = findConflictingBlocks(s.busy, a.date, a.startTime, a.endTime);
+    if(blocks.length){
+      out.push({idx, sid:s.sid, name:s.name, classCode:s.classCode, date:a.date, st:a.startTime, et:a.endTime, blocks});
+    }
+  });
+  return out;
 }
 
 // ============================================================
@@ -800,9 +889,16 @@ function loadMaster(file){
     const subjCnt = sampleSubj ? sampleSubj.subjects.length : 0;
     const backfillMsg = backfilled ? ` <span class="pill pill-ok" style="margin-left:6px">↻ ${backfilled}명 정보 보강</span>` : '';
     const subjMsg = ` <span class="pill" style="margin-left:6px;background:#eef;color:#557;">학생당 평균 ${subjCnt}과목</span>`;
-    document.getElementById('res-master').innerHTML=`<span class="pill pill-ok">🩷 ${cnt}명 로드</span>${subjMsg}${backfillMsg}`;
+
+    // 마스터 갱신 후 시간충돌 검출 (이미 배정된 학생들 대상)
+    const conflicts = detectAllConflicts();
+    const conflictMsg = conflicts.length
+      ? ` <span class="pill" style="margin-left:6px;background:#FFE5E5;color:#C0392B;font-weight:600;">⚠ ${conflicts.length}명 기존 배정과 충돌</span>`
+      : '';
+    document.getElementById('res-master').innerHTML=`<span class="pill pill-ok">🩷 ${cnt}명 로드</span>${subjMsg}${backfillMsg}${conflictMsg}`;
     document.getElementById('zone-master').classList.add('done');
     updateHeader();
+    updateConflictBanner();
   });
 }
 
@@ -1211,7 +1307,7 @@ function clearAssign(){
   if(!confirm('배정을 초기화할까요?'))return;
   assignments={};save();updateStats();
   document.getElementById('algoLog').innerHTML='<span class="text-muted">초기화됨.</span>';
-  renderSlots();renderStudentTable();renderResult();
+  renderSlots();renderStudentTable();renderResult();updateConflictBanner();
 }
 
 function log(msg,t=''){
@@ -1299,7 +1395,7 @@ function _runAssign(){
     }
   }
 
-  save();updateStats();renderSlots();renderStudentTable();renderResult();
+  save();updateStats();renderSlots();renderStudentTable();renderResult();updateConflictBanner();
   log(`🩷 완료: ${doneN}명 배정`,'ok');
   if(failN>0){
     log(`⚠ 미배정: ${failN}명 (수업 충돌로 가능한 슬롯 없음)`,'warn');
@@ -1326,6 +1422,7 @@ function renderResult(){
   if(fc)rows=rows.filter(r=>r.a&&r.a.consultantId===fc);
   if(fs==='done')rows=rows.filter(r=>r.a);
   if(fs==='none')rows=rows.filter(r=>!r.a);
+  if(fs==='conflict')rows=rows.filter(r=>r.a && r.s.busy && r.s.busy.length && isConflict(r.s.busy, r.a.date, r.a.startTime, r.a.endTime));
 
   // 통계
   const stats=`
@@ -1347,6 +1444,19 @@ function renderResult(){
   function classifyStatus(stu, asgn){
     if(!stu.busy || !stu.busy.length) return 'unknown';
     return isConflict(stu.busy, asgn.date, asgn.startTime, asgn.endTime) ? 'conflict' : 'ok';
+  }
+
+  // 충돌 사유 텍스트 생성: "월 10:00~11:50 K영어"
+  function conflictReason(stu, asgn){
+    const blocks = findConflictingBlocks(stu.busy||[], asgn.date, asgn.startTime, asgn.endTime);
+    if(!blocks.length) return '';
+    return blocks.map(b => {
+      const hs = String(Math.floor(b.s/60)).padStart(2,'0')+':'+String(b.s%60).padStart(2,'0');
+      const he = String(Math.floor(b.e/60)).padStart(2,'0')+':'+String(b.e%60).padStart(2,'0');
+      const label = b.group ? ` ${b.group}` : '';
+      const subj = b.subj ? ` ${b.subj}` : '';
+      return `${b.day} ${hs}~${he}${label}${subj}`;
+    }).join(' / ');
   }
 
   let html=stats;
@@ -1388,7 +1498,7 @@ function renderResult(){
             <td><span class="mm-badge">${r.s.maymac}</span></td>
             <td>${r.s.classCode||'-'}</td>
             <td class="font-mono">${r.s.sid}</td>
-            <td class="cell-name">${r.s.name}${r.s.submitted===false?' <span class="pill-mini-warn">📎 미제출</span>':''}${r.s.formData?'':' <span class="text-muted" style="font-size:11px">⚠ 양식없음</span>'}</td>
+            <td class="cell-name">${r.s.name}${r.s.submitted===false?' <span class="pill-mini-warn">📎 미제출</span>':''}${r.s.formData?'':' <span class="text-muted" style="font-size:11px">⚠ 양식없음</span>'}${r.status==='conflict'?`<div class="conflict-reason">⚠ ${conflictReason(r.s, r.a)}와 겹침</div>`:''}</td>
             <td style="text-align:center;white-space:nowrap;">
               <button class="btn-copy-sm" onclick="copyStudent(${r.idx})" title="셀 값 복사">📋</button>
               <button class="btn-copy-sm" onclick="printAnnouncement(${r.idx})" title="안내문 출력">📨</button>
@@ -2173,6 +2283,7 @@ renderStudentTable();
 updateStats();
 updateHeader();
 syncSettingsUI();
+updateConflictBanner();
 </script>
 </body>
 </html>
