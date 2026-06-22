@@ -170,6 +170,22 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
   padding:4px 8px;line-height:1;flex-shrink:0;
 }
 .conflict-banner .cb-close:hover{color:#7B1818;}
+
+/* 우하단 플로팅 설정 버튼 */
+.fab-settings{
+  position:fixed;bottom:24px;right:24px;z-index:90;
+  width:52px;height:52px;border-radius:50%;
+  background:linear-gradient(135deg, var(--lavender) 0%, var(--purple-deep) 100%);
+  color:#fff;border:none;cursor:pointer;
+  font-size:24px;line-height:1;
+  box-shadow:0 4px 14px rgba(106,82,168,0.35);
+  transition:transform 0.15s ease, box-shadow 0.15s ease;
+}
+.fab-settings:hover{
+  transform:translateY(-2px) rotate(45deg);
+  box-shadow:0 6px 20px rgba(106,82,168,0.45);
+}
+.fab-settings:active{transform:translateY(0);}
 .date-group table tr:last-child td{border-bottom:none;}
 /* 시간충돌 검증 상태 표시 */
 .date-group table tr.s-ok td:first-child{border-left:3px solid #4caf50;}
@@ -322,9 +338,18 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
     </div>
   </div>
 
+</div>
+
+<!-- ===== TAB 6: 설정 (탭바엔 안 보임, 우하단 ⚙ 버튼으로 접근) ===== -->
+<div class="tab-panel" id="tab-settings">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+    <h2 style="margin:0;font-size:20px;color:var(--dark);">⚙ 설정</h2>
+    <button class="btn btn-ghost btn-sm" onclick="closeSettings()">← 이전으로</button>
+  </div>
+
   <!-- 안내문 설정 -->
   <div class="settings-zone">
-    <div class="settings-title">⚙ 안내문 설정</div>
+    <div class="settings-title">📨 안내문 설정</div>
     <div class="settings-row">
       <label for="set-location">상담 장소</label>
       <input type="text" id="set-location" placeholder="예: L층 상담실(행정실 옆)" oninput="saveSettingsField('location', this.value)">
@@ -340,6 +365,20 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
     <div class="settings-desc">
       <b>편집 팁</b>: <code>**굵게**</code>로 강조 표시 / 빈 줄로 단락 구분 / 학생 정보·일정·장소·유형은 자동으로 채워지므로 본문에 다시 쓸 필요 없음<br>
       <button class="btn-restore" style="margin-top:8px;font-size:11px;padding:5px 10px;" onclick="resetAnnouncementBody()">↺ 본문 기본값으로 되돌리기</button>
+    </div>
+  </div>
+
+  <!-- 발송문자 설정 -->
+  <div class="settings-zone" style="background:rgba(212,214,252,.3);">
+    <div class="settings-title">📱 발송문자 설정</div>
+    <div class="settings-row settings-row-block">
+      <label for="set-sms">SMS 본문 템플릿</label>
+      <textarea id="set-sms" rows="10" oninput="saveSettingsField('smsTemplate', this.value)" placeholder="예: [QUETTA] {이름} 학생 학부모님께, {날짜} {시간}에 수시 상담이 예정되어 있습니다..."></textarea>
+    </div>
+    <div class="settings-desc">
+      <b>치환 변수</b>: <code>{이름}</code>, <code>{학번}</code>, <code>{날짜}</code>, <code>{시간}</code>, <code>{담당자}</code>, <code>{장소}</code>, <code>{상담유형}</code> (배정 명단 export 시 자동 치환)<br>
+      <button class="btn-restore" style="margin-top:8px;font-size:11px;padding:5px 10px;" onclick="resetSmsTemplate()">↺ 템플릿 기본값</button>
+      <button class="btn-restore" style="margin-top:8px;font-size:11px;padding:5px 10px;margin-left:6px;" onclick="copySmsPreview()">📋 미리보기 복사 (첫 학생 기준)</button>
     </div>
   </div>
 
@@ -365,6 +404,9 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
     <button class="btn-danger" onclick="resetAll()">전체 초기화</button>
   </div>
 </div>
+
+<!-- 우하단 플로팅 설정 버튼 -->
+<button id="fab-settings" class="fab-settings" onclick="openSettings()" title="설정">⚙</button>
 
 <!-- ===== TAB 2: 담당자 & 슬롯 ===== -->
 <div class="tab-panel" id="tab-slots">
@@ -639,10 +681,25 @@ const DEFAULT_ANNOUNCEMENT_BODY = `**1. 상담 전 준비할 것**
 **3. 상담 후 안내**
 상담 리포트를 받으면 **학생지원실**로 가서 학부모님과 상담 내용에 대해 통화를 하시면 됩니다.`;
 
+const DEFAULT_SMS_TEMPLATE = `[QUETTA] 수시 상담 안내
+
+{이름} 학생 학부모님께,
+
+{날짜} {시간}에 {담당자} 선생님과 수시 {상담유형} 상담이 예정되어 있습니다.
+
+상담 장소: {장소}
+학생 학번: {학번}
+
+문의는 행정실로 부탁드립니다.
+
+Good Better Best
+강남대성기숙 QUETTA`;
+
 const DEFAULT_SETTINGS = {
   location: 'L층 상담실(행정실 옆)',
   consultType: '학생부종합/교과',
-  body: DEFAULT_ANNOUNCEMENT_BODY
+  body: DEFAULT_ANNOUNCEMENT_BODY,
+  smsTemplate: DEFAULT_SMS_TEMPLATE
 };
 let settings = {...DEFAULT_SETTINGS};
 
@@ -825,7 +882,10 @@ function loadMaster(file){
       sid:   headers.indexOf('학번'),
       ban:   headers.indexOf('반'),
       group: headers.indexOf('그룹'),
-      name:  headers.indexOf('성명')
+      name:  headers.indexOf('성명'),
+      phoneStu:  headers.indexOf('학생HP'),
+      phoneGuardName: headers.indexOf('보호자'),
+      phoneGuard:    headers.indexOf('보호자HP')
     };
     if(idx.sid < 0){
       alert('마스터 파일에 "학번" 컬럼이 없습니다.');
@@ -862,6 +922,9 @@ function loadMaster(file){
         반: String(row[idx.ban]||'').trim(),
         그룹: String(row[idx.group]||'').trim(),
         성명: String(row[idx.name]||'').trim(),
+        학생HP: idx.phoneStu>=0 ? String(row[idx.phoneStu]||'').trim() : '',
+        보호자: idx.phoneGuardName>=0 ? String(row[idx.phoneGuardName]||'').trim() : '',
+        보호자HP: idx.phoneGuard>=0 ? String(row[idx.phoneGuard]||'').trim() : '',
         subjects
       };
     });
@@ -1764,16 +1827,53 @@ function copyDateList(date){
 
 function exportList(){
   if(!targetList.length){alert('데이터가 없습니다.');return;}
-  const rows=[['마이맥반','생활반','학번','이름','구분','담당자','날짜','요일','시작','종료','상태']];
-  targetList.forEach((s,i)=>{
-    const a=assignments[i];
-    rows.push([s.maymac,s.classCode,s.sid,s.name,s.source==='survey'?'수시지원':'개별추가',
-      a?a.consultantName:'',a?a.date:'',a?getWd(a.date):'',a?a.startTime:'',a?a.endTime:'',a?'배정완료':'미배정']);
+
+  // 결과탭 필터(fConsultant, fStatus) 반영해서 export
+  const fc=document.getElementById('fConsultant')?.value || '';
+  const fs=document.getElementById('fStatus')?.value || '';
+  let pairs=targetList.map((s,i)=>({s,a:assignments[i]||null}));
+  if(fc) pairs=pairs.filter(p=>p.a&&p.a.consultantId===fc);
+  if(fs==='done') pairs=pairs.filter(p=>p.a);
+  if(fs==='none') pairs=pairs.filter(p=>!p.a);
+  if(fs==='conflict') pairs=pairs.filter(p=>p.a && p.s.busy && p.s.busy.length && isConflict(p.s.busy, p.a.date, p.a.startTime, p.a.endTime));
+
+  if(!pairs.length){alert('현재 필터 조건에 해당하는 학생이 없습니다.');return;}
+
+  // 사용자 요청 컬럼 순서: 보호자HP / 학생이름 / 학번 / 상담일자 / 상담시간 + 보조 정보
+  const rows=[['보호자HP','학생이름','학번','상담일자','상담시간','마이맥반','생활반','담당자','상태','충돌 사유']];
+  pairs.forEach(p=>{
+    const s=p.s, a=p.a;
+    const master = masterMap[s.sid] || {};
+    const guardHP = master.보호자HP || '';
+    let status='미배정', reason='', timeRange='';
+    if(a){
+      timeRange = `${a.startTime}~${a.endTime}`;
+      const isConf = s.busy && s.busy.length && isConflict(s.busy, a.date, a.startTime, a.endTime);
+      status = isConf ? '⚠ 시간충돌' : '배정완료';
+      if(isConf){
+        const blocks = findConflictingBlocks(s.busy, a.date, a.startTime, a.endTime);
+        reason = blocks.map(b=>{
+          const hs=String(Math.floor(b.s/60)).padStart(2,'0')+':'+String(b.s%60).padStart(2,'0');
+          const he=String(Math.floor(b.e/60)).padStart(2,'0')+':'+String(b.e%60).padStart(2,'0');
+          return `${b.day} ${hs}~${he} ${b.group||''} ${b.subj||''}`.trim();
+        }).join(' / ');
+      }
+    }
+    rows.push([
+      guardHP, s.name, s.sid,
+      a?a.date:'', timeRange,
+      s.maymac, s.classCode||'-',
+      a?a.consultantName:'', status, reason
+    ]);
   });
+
   const ws=XLSX.utils.aoa_to_sheet(rows);
+  // 컬럼 너비
+  ws['!cols'] = [{wch:15},{wch:10},{wch:8},{wch:12},{wch:14},{wch:8},{wch:8},{wch:10},{wch:12},{wch:40}];
   const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,ws,'수시상담배정');
-  XLSX.writeFile(wb,`수시상담배정_${new Date().toISOString().slice(0,10)}.xlsx`);
+  XLSX.utils.book_append_sheet(wb,ws,'배정명단');
+  const filterTag = fs==='conflict' ? '_충돌만' : (fs==='done' ? '_배정완료' : (fs==='none' ? '_미배정' : ''));
+  XLSX.writeFile(wb,`수시상담배정${filterTag}_${new Date().toISOString().slice(0,10)}.xlsx`);
 }
 
 // ============================================================
@@ -2027,14 +2127,17 @@ function syncSettingsUI(){
   if(!settings.location || !String(settings.location).trim()){ settings.location = DEFAULT_SETTINGS.location; restored = true; }
   if(!settings.consultType || !String(settings.consultType).trim()){ settings.consultType = DEFAULT_SETTINGS.consultType; restored = true; }
   if(!settings.body || !String(settings.body).trim()){ settings.body = DEFAULT_SETTINGS.body; restored = true; }
+  if(!settings.smsTemplate || !String(settings.smsTemplate).trim()){ settings.smsTemplate = DEFAULT_SETTINGS.smsTemplate; restored = true; }
   if(restored) save();
 
   const l = document.getElementById('set-location');
   const c = document.getElementById('set-consult-type');
   const b = document.getElementById('set-body');
+  const sm = document.getElementById('set-sms');
   if(l) l.value = settings.location;
   if(c) c.value = settings.consultType;
   if(b) b.value = settings.body;
+  if(sm) sm.value = settings.smsTemplate;
 }
 
 // 안내문 본문을 기본값으로 되돌림
@@ -2044,6 +2147,67 @@ function resetAnnouncementBody(){
   save();
   syncSettingsUI();
   showToast('본문 기본값으로 복구');
+}
+
+// SMS 본문 템플릿을 기본값으로 되돌림
+function resetSmsTemplate(){
+  if(!confirm('SMS 본문 템플릿을 기본값으로 되돌릴까요?\n현재 편집한 내용은 사라집니다.'))return;
+  settings.smsTemplate = DEFAULT_SMS_TEMPLATE;
+  save();
+  syncSettingsUI();
+  showToast('SMS 템플릿 기본값으로 복구');
+}
+
+// SMS 미리보기: 첫 배정 학생 기준으로 치환하여 클립보드 복사
+function copySmsPreview(){
+  // 첫 배정 학생 찾기
+  let firstIdx = null;
+  for(const k of Object.keys(assignments)){
+    firstIdx = parseInt(k);
+    break;
+  }
+  if(firstIdx === null){
+    alert('배정된 학생이 없습니다. 배정 후 사용하세요.');
+    return;
+  }
+  const s = targetList[firstIdx];
+  const a = assignments[firstIdx];
+  if(!s || !a){alert('미리보기용 학생 정보를 찾을 수 없습니다.');return;}
+
+  const text = (settings.smsTemplate || '')
+    .replace(/\{이름\}/g, s.name||'')
+    .replace(/\{학번\}/g, s.sid||'')
+    .replace(/\{날짜\}/g, a.date||'')
+    .replace(/\{시간\}/g, `${a.startTime||''}~${a.endTime||''}`)
+    .replace(/\{담당자\}/g, a.consultantName||'')
+    .replace(/\{장소\}/g, settings.location||'')
+    .replace(/\{상담유형\}/g, settings.consultType||'');
+
+  navigator.clipboard.writeText(text).then(()=>{
+    showToast(`📋 미리보기 복사 (${s.name} 기준)`);
+  }).catch(()=>{
+    alert('클립보드 복사 실패');
+  });
+}
+
+// 설정 탭 열기 (다른 탭 모두 비활성화, 설정 탭만 활성화)
+function openSettings(){
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  const panel = document.getElementById('tab-settings');
+  if(panel) panel.classList.add('active');
+  syncSettingsUI();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+// 설정 탭 닫기 → 학생관리 탭으로 복귀
+function closeSettings(){
+  const btn = document.querySelector('[data-tab="tab-students"]');
+  if(btn) btn.click();
+  else {
+    document.getElementById('tab-settings').classList.remove('active');
+    document.getElementById('tab-students').classList.add('active');
+  }
 }
 
 // 안내문 HTML 빌더 (A4 세로 1페이지)
