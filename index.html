@@ -1812,6 +1812,16 @@ function copyStudent(idx){
     .catch(()=>showToast('복사 실패'));
 }
 
+// 날짜 한국식 표기: '2026-08-22' → '8월 22일'
+function formatKoreanDate(dateStr){
+  if(!dateStr) return '';
+  const parts = String(dateStr).split('-');
+  if(parts.length !== 3) return dateStr;
+  const m = parseInt(parts[1], 10);
+  const d = parseInt(parts[2], 10);
+  return `${m}월 ${d}일`;
+}
+
 // 날짜별 SMS 발송용 엑셀 다운로드 (보호자HP / 이름 / 학번 / 일자 / 시간 — 5컬럼)
 function exportSmsList(idxList, date){
   if(!idxList || !idxList.length){alert('내보낼 학생이 없습니다.');return;}
@@ -1829,7 +1839,7 @@ function exportSmsList(idxList, date){
       master.보호자HP || '',
       p.s.name,
       p.s.sid,
-      p.a.date,
+      formatKoreanDate(p.a.date),
       `${p.a.startTime}~${p.a.endTime}`
     ]);
   });
@@ -1891,7 +1901,7 @@ function exportList(){
     }
     rows.push([
       guardHP, s.name, s.sid,
-      a?a.date:'', timeRange,
+      a?formatKoreanDate(a.date):'', timeRange,
       s.maymac, s.classCode||'-',
       a?a.consultantName:'', status, reason
     ]);
