@@ -186,6 +186,20 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
   box-shadow:0 6px 20px rgba(106,82,168,0.45);
 }
 .fab-settings:active{transform:translateY(0);}
+
+/* 학생 개별 추가 모달 폼 */
+.add-section{margin-top:16px;padding:14px;background:rgba(212,214,252,.18);border-radius:10px;border:1px solid rgba(106,82,168,.1);}
+.add-section-title{font-size:13px;font-weight:700;color:var(--purple-deep);margin-bottom:10px;}
+.add-label{display:block;font-size:11px;color:var(--muted);margin-bottom:3px;font-weight:500;}
+.add-section input{width:100%;padding:6px 8px;font-size:12.5px;border:1px solid var(--border);border-radius:6px;}
+.add-section input:focus{outline:none;border-color:var(--lavender);}
+.add-table-wrap{overflow-x:auto;}
+.add-table{width:100%;border-collapse:collapse;font-size:12px;}
+.add-table th{background:rgba(106,82,168,.08);padding:6px 4px;font-weight:600;color:var(--purple-deep);border:1px solid var(--border);text-align:center;font-size:11px;}
+.add-table td{padding:0;border:1px solid var(--border);}
+.add-table td input{width:100%;padding:5px 6px;font-size:11.5px;border:none;border-radius:0;background:transparent;}
+.add-table td input:focus{outline:none;background:rgba(212,214,252,.3);}
+.add-table tbody td.idx-cell{text-align:center;font-weight:600;color:var(--muted);background:rgba(212,214,252,.15);font-size:11px;padding:5px;}
 .date-group table tr:last-child td{border-bottom:none;}
 /* 시간충돌 검증 상태 표시 */
 .date-group table tr.s-ok td:first-child{border-left:3px solid #4caf50;}
@@ -481,6 +495,15 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
         </select>
       </div>
       <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">수시 지원 유형</label>
+        <select id="ansTypeFilter" onchange="renderAnswers()" style="min-width:140px;">
+          <option value="">전체 유형</option>
+          <option value="hak">학종·교과 위주</option>
+          <option value="essay">논술 위주</option>
+          <option value="none">미응답</option>
+        </select>
+      </div>
+      <div>
         <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">이름 검색</label>
         <input type="text" id="ansNameSearch" oninput="renderAnswers()" placeholder="이름 일부 입력" style="min-width:160px;">
       </div>
@@ -490,6 +513,7 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
           <option value="name">이름순</option>
           <option value="sid">학번순</option>
           <option value="class">생활반순</option>
+          <option value="type">유형순 (학종·교과 → 논술)</option>
         </select>
       </div>
       <div style="flex:1;text-align:right;">
@@ -505,14 +529,70 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
 </div><!-- /main -->
 
 <!-- 개별 추가 모달 -->
-<div id="addModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:none;align-items:center;justify-content:center;">
-  <div style="background:#fff;border-radius:14px;padding:28px;width:400px;max-width:90vw;">
-    <div style="font-size:15px;font-weight:700;margin-bottom:18px;">학생 개별 추가</div>
-    <div style="display:grid;gap:10px;">
-      <div><label style="font-size:12px;color:var(--muted);">학번</label><br><input id="add-sid" type="text" placeholder="예: 7411" style="width:100%;margin-top:4px;"></div>
-      <div><label style="font-size:12px;color:var(--muted);">이름</label><br><input id="add-name" type="text" placeholder="이름" style="width:100%;margin-top:4px;"></div>
-      <div><label style="font-size:12px;color:var(--muted);">생활반 (예: A1, X3)</label><br><input id="add-class" type="text" placeholder="A1" style="width:100%;margin-top:4px;"></div>
+<div id="addModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:none;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#fff;border-radius:14px;padding:24px 28px;width:1100px;max-width:96vw;max-height:92vh;overflow-y:auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+      <div style="font-size:16px;font-weight:700;">학생 개별 추가</div>
+      <div style="font-size:11px;color:var(--muted);">서면 자료 보고 직접 입력 · 빈 칸은 그대로 두면 됩니다</div>
     </div>
+
+    <!-- 1) 기본 정보 -->
+    <div class="add-section">
+      <div class="add-section-title">기본 정보</div>
+      <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:10px;">
+        <div><label class="add-label">학번 *</label><input id="add-sid" type="text" placeholder="5481"></div>
+        <div><label class="add-label">이름 *</label><input id="add-name" type="text" placeholder="홍길동"></div>
+        <div><label class="add-label">생활반</label><input id="add-class" type="text" placeholder="A1"></div>
+        <div><label class="add-label">출신고</label><input id="add-hs" type="text" placeholder="○○고"></div>
+        <div><label class="add-label">인문/자연</label><input id="add-humSci" type="text" placeholder="인문 또는 자연"></div>
+        <div><label class="add-label">재학 대학·학과</label><input id="add-curCollege" type="text" placeholder="해당시"></div>
+      </div>
+    </div>
+
+    <!-- 2) 수시 지원 정보 (단일값) -->
+    <div class="add-section">
+      <div class="add-section-title">수시 지원 정보</div>
+      <div style="display:grid;grid-template-columns:repeat(4, 1fr);gap:10px;">
+        <div><label class="add-label">수시 지원 여부</label><input id="add-apply" type="text" placeholder="예/아니오"></div>
+        <div><label class="add-label">지원 유형</label><input id="add-type" type="text" placeholder="학종/교과/논술/혼합"></div>
+        <div><label class="add-label">상담 필요</label><input id="add-needCons" type="text" placeholder="학종/교과/논술"></div>
+        <div><label class="add-label">논술 종류</label><input id="add-essayKind" type="text" placeholder="해당시"></div>
+      </div>
+    </div>
+
+    <!-- 3) 작년 결과 (6차 × 9필드) -->
+    <div class="add-section">
+      <div class="add-section-title">작년 지원 현황 <span style="font-weight:400;color:var(--muted);font-size:11px;">(빈 차수는 비워두세요)</span></div>
+      <div class="add-table-wrap">
+        <table class="add-table">
+          <thead>
+            <tr>
+              <th style="width:44px;">차수</th>
+              <th>지원대학</th><th>학과</th><th>구분</th><th>전형명</th>
+              <th>적용내신</th><th>지원형태</th><th>1단계</th><th>최종</th><th>예비번호</th>
+            </tr>
+          </thead>
+          <tbody id="add-past-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 4) 올해 희망 (6순위 × 4필드) -->
+    <div class="add-section">
+      <div class="add-section-title">올해 지원 희망 <span style="font-weight:400;color:var(--muted);font-size:11px;">(빈 순위는 비워두세요)</span></div>
+      <div class="add-table-wrap">
+        <table class="add-table">
+          <thead>
+            <tr>
+              <th style="width:44px;">순위</th>
+              <th>지원대학</th><th>학과</th><th>구분</th><th>전형명</th>
+            </tr>
+          </thead>
+          <tbody id="add-plan-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="flex gap-8 mt-16 justify-between">
       <button class="btn btn-ghost" onclick="closeModal()">취소</button>
       <button class="btn btn-primary" onclick="addStudentManual()">추가</button>
@@ -1069,7 +1149,36 @@ function removeTarget(idx){
   renderStudentTable();
 }
 
-function showAddModal(){document.getElementById('addModal').style.display='flex';}
+function showAddModal(){
+  // 표 행 동적 생성 (열릴 때마다 초기화)
+  const pastTbody = document.getElementById('add-past-tbody');
+  const planTbody = document.getElementById('add-plan-tbody');
+  if(pastTbody){
+    pastTbody.innerHTML = '';
+    for(let i=1; i<=6; i++){
+      const tr = document.createElement('tr');
+      let cells = `<td class="idx-cell">${i}차</td>`;
+      for(let f=0; f<PAST_FIELDS.length; f++){
+        cells += `<td><input type="text" data-past="${i-1}" data-field="${PAST_FIELDS[f]}"></td>`;
+      }
+      tr.innerHTML = cells;
+      pastTbody.appendChild(tr);
+    }
+  }
+  if(planTbody){
+    planTbody.innerHTML = '';
+    for(let i=1; i<=6; i++){
+      const tr = document.createElement('tr');
+      let cells = `<td class="idx-cell">${i}순위</td>`;
+      for(let f=0; f<PLAN_FIELDS.length; f++){
+        cells += `<td><input type="text" data-plan="${i-1}" data-field="${PLAN_FIELDS[f]}"></td>`;
+      }
+      tr.innerHTML = cells;
+      planTbody.appendChild(tr);
+    }
+  }
+  document.getElementById('addModal').style.display='flex';
+}
 function closeModal(){document.getElementById('addModal').style.display='none';}
 
 // 백업: 현재 상태를 JSON 파일로 다운로드
@@ -1182,15 +1291,73 @@ function addStudentManual(){
   const classCode=document.getElementById('add-class').value.trim().toUpperCase();
   if(!sid||!name){alert('학번과 이름을 입력해 주세요.');return;}
 
+  // 중복 학번 체크
+  if(targetList.some(s => s.sid === sid)){
+    if(!confirm(`학번 ${sid}이(가) 이미 학생 목록에 있습니다.\n그래도 추가하시겠어요? (중복 학번이 됩니다)`))return;
+  }
+
   const master=masterMap[sid];
   const busy=master?buildBusy(master):[];
   const mm=getMM(classCode);
 
-  targetList.push({sid,name,classCode,maymac:mm.m,busy,source:'manual'});
+  // 메타 단일값
+  const meta = {
+    hs:         document.getElementById('add-hs')?.value.trim() || '',
+    humSci:     document.getElementById('add-humSci')?.value.trim() || '',
+    curCollege: document.getElementById('add-curCollege')?.value.trim() || '',
+    apply:      document.getElementById('add-apply')?.value.trim() || '',
+    type:       document.getElementById('add-type')?.value.trim() || '',
+    needCons:   document.getElementById('add-needCons')?.value.trim() || '',
+    essayKind:  document.getElementById('add-essayKind')?.value.trim() || ''
+  };
+
+  // 작년 결과 6차 × 9필드, 올해 희망 6순위 × 4필드 수집
+  const past = Array.from({length:6}, () => ({}));
+  const plan = Array.from({length:6}, () => ({}));
+  document.querySelectorAll('#add-past-tbody input[data-past]').forEach(inp => {
+    const idx = parseInt(inp.dataset.past);
+    const field = inp.dataset.field;
+    const v = inp.value.trim();
+    if(v) past[idx][field] = v;
+  });
+  document.querySelectorAll('#add-plan-tbody input[data-plan]').forEach(inp => {
+    const idx = parseInt(inp.dataset.plan);
+    const field = inp.dataset.field;
+    const v = inp.value.trim();
+    if(v) plan[idx][field] = v;
+  });
+
+  // 입력한 게 하나라도 있으면 formData 생성, 아니면 null
+  const hasFormData = Object.values(meta).some(v => v) ||
+                      past.some(p => Object.keys(p).length) ||
+                      plan.some(p => Object.keys(p).length);
+  let formData = null;
+  if(hasFormData){
+    formData = {
+      ...meta,
+      past, plan,
+      pastYear: LAST_GRADE,
+      planYear: CURRENT_GRADE
+    };
+  }
+
+  const student = {sid, name, classCode, maymac:mm.m, busy, source:'manual'};
+  if(formData) student.formData = formData;
+
+  targetList.push(student);
   save();
   renderStudentTable();
   closeModal();
-  ['add-sid','add-name','add-class'].forEach(id=>document.getElementById(id).value='');
+
+  // 모든 input 초기화
+  ['add-sid','add-name','add-class','add-hs','add-humSci','add-curCollege',
+   'add-apply','add-type','add-needCons','add-essayKind'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  document.querySelectorAll('#add-past-tbody input, #add-plan-tbody input').forEach(inp => inp.value = '');
+
+  showToast(`${name} 학생 추가 완료${hasFormData ? ' (양식 포함)' : ''}`);
 }
 
 // ============================================================
@@ -1605,6 +1772,25 @@ function renderResult(){
 // ============================================================
 // TAB 5: 답변 조회 — 반별로 학생 답변(매핑된 질문) 확인
 // ============================================================
+// 학생의 수시 지원 유형 분류
+// 'hak' = 학종/교과 포함, 'essay' = 논술 포함, 'none' = 미응답/빈값
+// 혼합("학종+논술")인 경우 두 그룹 모두에 매칭됨 (포함관계 검사)
+function getApplyTypeFlags(typeStr){
+  const t = String(typeStr || '').trim();
+  return {
+    isHak: /학종|교과/.test(t),
+    isEssay: /논술/.test(t),
+    isEmpty: !t
+  };
+}
+function applyTypeSortRank(typeStr){
+  const f = getApplyTypeFlags(typeStr);
+  if(f.isHak && !f.isEssay) return 0;       // 학종/교과만
+  if(f.isHak && f.isEssay) return 1;        // 혼합
+  if(f.isEssay) return 2;                   // 논술만
+  return 9;                                 // 미응답/기타
+}
+
 function renderAnswers(){
   // 마이맥반 드롭다운 옵션 동적 채움
   const sel = document.getElementById('ansMMFilter');
@@ -1620,15 +1806,26 @@ function renderAnswers(){
   }
 
   const filterMM = sel.value;
+  const filterType = document.getElementById('ansTypeFilter').value;
   const nameQuery = (document.getElementById('ansNameSearch').value || '').trim().toLowerCase();
   const sortMode = document.getElementById('ansSort').value;
 
   let students = [...targetList];
   if(filterMM) students = students.filter(s => s.maymac === filterMM);
+  if(filterType){
+    students = students.filter(s => {
+      const f = getApplyTypeFlags(s.formData?.type);
+      if(filterType==='hak') return f.isHak;
+      if(filterType==='essay') return f.isEssay;
+      if(filterType==='none') return f.isEmpty;
+      return true;
+    });
+  }
   if(nameQuery) students = students.filter(s => String(s.name||'').toLowerCase().includes(nameQuery) || String(s.sid||'').includes(nameQuery));
 
   if(sortMode === 'sid') students.sort((a,b) => String(a.sid).localeCompare(String(b.sid)));
   else if(sortMode === 'class') students.sort((a,b) => String(a.classCode||'').localeCompare(String(b.classCode||''),'ko') || a.name.localeCompare(b.name,'ko'));
+  else if(sortMode === 'type') students.sort((a,b) => applyTypeSortRank(a.formData?.type) - applyTypeSortRank(b.formData?.type) || a.name.localeCompare(b.name,'ko'));
   else students.sort((a,b) => a.name.localeCompare(b.name, 'ko'));
 
   if(!students.length){
@@ -1640,9 +1837,11 @@ function renderAnswers(){
   const py = students.find(s => s.formData?.pastYear)?.formData?.pastYear || LAST_GRADE;
   const ply = students.find(s => s.formData?.planYear)?.formData?.planYear || CURRENT_GRADE;
 
+  const typeLabel = filterType==='hak'?'학종·교과 위주':(filterType==='essay'?'논술 위주':(filterType==='none'?'미응답':''));
   const filterLabel = filterMM ? `마이맥반 ${filterMM}` : '전체';
+  const typeLabelText = typeLabel ? ` · 유형: <b>${typeLabel}</b>` : '';
   const searchLabel = nameQuery ? ` · 검색: <b>${_esc(nameQuery)}</b>` : '';
-  let html = `<div class="ans-summary card">📋 ${filterLabel}${searchLabel} · 총 <b>${students.length}명</b></div>`;
+  let html = `<div class="ans-summary card">📋 ${filterLabel}${typeLabelText}${searchLabel} · 총 <b>${students.length}명</b></div>`;
 
   for(const s of students){
     const fd = s.formData || {};
