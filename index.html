@@ -1715,7 +1715,7 @@ function renderResult(){
             <button class="btn-copy-list" onclick="copyDateList('${date}')">📋 명단 복사</button>
             <button class="btn-copy-list" onclick="printDateAnnouncements('${date}')" style="border-color:var(--rose);color:var(--purple-deep)">📨 안내문 일괄</button>
             <button class="btn-copy-list" onclick="exportSmsList([${idxList.join(',')}],'${date}')" style="border-color:var(--lavender);color:var(--purple-deep)">📱 SMS 다운</button>
-            <button class="btn-print-bulk" onclick="printForms([${idxList.join(',')}])">📄 ${date} 전체 양식 출력</button>
+            <button class="btn-copy-list" onclick="printForms([${idxList.join(',')}])" style="border-color:var(--green);color:var(--purple-deep)">📄 조사서 일괄</button>
           </div>
         </div>
         <table>
