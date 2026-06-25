@@ -1561,6 +1561,100 @@ function runAssign(){
   },50);
 }
 
+// 단일 학생 배정 취소 + 빈자리 메우기
+// - 1순위: 기존 미배정 학생 풀
+// - 2순위: 빈 슬롯 날짜 이후 다른 슬롯에 배정된 학생 (이후 일정에서 끌어옴)
+// 후보 중 시간충돌 없는 학생 (생기부 우선 + 셔플) 1명 선택
+// 옮겨온 학생의 원래 슬롯은 빈자리로 남음
+function reassignSingleStudent(idx){
+  const stu = targetList[idx];
+  const a = assignments[idx];
+  if(!stu || !a){alert('배정 정보를 찾을 수 없습니다.');return;}
+
+  if(!confirm(`${stu.name} 학생의 ${formatKoreanDate(a.date)} ${a.startTime} 배정을 취소합니다.\n\n빈자리는 다음 순서로 자동 메웁니다:\n  1. 미배정 학생\n  2. ${a.date} 이후 일정에 배정된 학생\n\n계속하시겠어요?`))return;
+
+  // 빈자리 정보 보관
+  const openSlot = {cid:a.consultantId, cname:a.consultantName, did:a.dateId, tid:a.timeId, date:a.date, st:a.startTime, et:a.endTime};
+
+  // 1. 학생 A 배정 제거
+  delete assignments[idx];
+
+  // 2. 후보 학생 모음
+  // 1순위: 미배정 학생
+  const unassigned = [];
+  // 2순위: 이후 날짜 배정 학생
+  const laterAssigned = [];
+  targetList.forEach((s,i) => {
+    if(i === idx) return;  // 방금 제거한 학생 본인 제외
+    const asgn = assignments[i];
+    if(!asgn){
+      unassigned.push([i, s]);
+    } else if(asgn.date > openSlot.date){
+      laterAssigned.push([i, s]);
+    }
+  });
+
+  // 3. 각 그룹 내 셔플 + 생기부 우선
+  function shuffleAndSort(arr){
+    for(let i=arr.length-1; i>0; i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    arr.sort((a,b) => (b[1].submitted?1:0) - (a[1].submitted?1:0));
+    return arr;
+  }
+  shuffleAndSort(unassigned);
+  shuffleAndSort(laterAssigned);
+
+  // 4. 담당자-날짜 한도 (해당 슬롯의 담당자 카운트)
+  const dayKey = `${openSlot.cid}|${openSlot.date}`;
+  const consultant = consultants.find(c => c.id === openSlot.cid);
+  const maxAllowed = consultant?.maxPerDay ?? 8;
+  // 이미 빈자리이므로 카운트 -1 한 상태. 따라서 현재 카운트는 maxAllowed-1보다 작거나 같아야 채울 수 있음
+  const curCount = Object.values(assignments).filter(x => x.consultantId === openSlot.cid && x.date === openSlot.date).length;
+  if(curCount >= maxAllowed){
+    save(); renderResult(); updateConflictBanner();
+    showToast(`${stu.name} 배정 취소 · 한도 초과로 메우기 불가`);
+    return;
+  }
+
+  // 5. 후보 중 시간충돌 없는 학생 찾기
+  let chosen = null;
+  let chosenSource = '';
+  for(const [i, s] of unassigned){
+    if(!isConflict(s.busy||[], openSlot.date, openSlot.st, openSlot.et)){
+      chosen = i; chosenSource = '미배정';
+      break;
+    }
+  }
+  if(chosen === null){
+    for(const [i, s] of laterAssigned){
+      if(!isConflict(s.busy||[], openSlot.date, openSlot.st, openSlot.et)){
+        chosen = i; chosenSource = '이후 일정';
+        break;
+      }
+    }
+  }
+
+  // 6. 결과 처리
+  if(chosen !== null){
+    // 옮기기 전 원래 배정 정보 (있다면)
+    const wasAt = assignments[chosen];
+    assignments[chosen] = {
+      consultantId: openSlot.cid, consultantName: openSlot.cname,
+      dateId: openSlot.did, timeId: openSlot.tid,
+      date: openSlot.date, startTime: openSlot.st, endTime: openSlot.et
+    };
+    const movedName = targetList[chosen].name;
+    const fromMsg = wasAt ? `${formatKoreanDate(wasAt.date)} ${wasAt.startTime}` : '미배정';
+    save(); renderResult(); updateConflictBanner();
+    showToast(`${stu.name} 취소 · ${movedName} 학생을 ${chosenSource}(${fromMsg})에서 이동`);
+  } else {
+    save(); renderResult(); updateConflictBanner();
+    showToast(`${stu.name} 배정 취소 · 메울 학생 후보 없음 (슬롯 비어있음)`);
+  }
+}
+
 function _runAssign(){
   document.getElementById('algoLog').innerHTML='';
   assignments={};
@@ -1734,6 +1828,7 @@ function renderResult(){
               <button class="btn-copy-sm" onclick="copyStudent(${r.idx})" title="셀 값 복사">📋</button>
               <button class="btn-copy-sm" onclick="printAnnouncement(${r.idx})" title="안내문 출력">📨</button>
               <button class="btn-print" onclick="printForms([${r.idx}])">📄 양식</button>
+              <button class="btn-copy-sm" onclick="reassignSingleStudent(${r.idx})" title="이 학생 빼고 빈자리 메우기" style="border-color:#C0392B;color:#C0392B;">🔄</button>
             </td>
           </tr>`).join('')}</tbody>
         </table>
