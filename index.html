@@ -136,6 +136,37 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
 .date-group table th{background:var(--purple-deep);color:#fff;font-size:12px;padding:8px 10px;text-align:left;white-space:nowrap;}
 .date-group table td{padding:8px 10px;border-bottom:1px solid var(--border);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .date-group table td.cell-name{white-space:normal;word-break:keep-all;}
+
+/* 날짜 고정 (자동 배정에서 보호) */
+.date-locked{box-shadow:0 0 0 2px #FFD700, 0 2px 8px rgba(255,215,0,0.15);}
+.date-locked .date-group-header{background:linear-gradient(135deg,#FFF4B8 0%,#FFE7A3 100%);}
+.lock-badge{
+  display:inline-block;background:#FFD700;color:#7B5A00;
+  padding:3px 9px;border-radius:10px;font-size:11px;font-weight:700;
+  margin-left:4px;letter-spacing:-0.3px;
+}
+.date-lock-bar{
+  display:flex;justify-content:flex-end;align-items:center;
+  padding:10px 14px;background:rgba(212,214,252,0.08);
+  border-top:1px solid var(--border);
+}
+.lock-star{
+  background:transparent;border:1.5px solid var(--border);
+  width:38px;height:38px;border-radius:50%;
+  font-size:18px;line-height:1;cursor:pointer;
+  color:#bbb;
+  transition:all 0.18s ease;
+}
+.lock-star:hover{
+  background:#FFF8DC;border-color:#FFD700;color:#FFB800;transform:scale(1.08);
+}
+.lock-star.active{
+  background:#FFF4B8;border-color:#FFD700;color:#F59E0B;
+  box-shadow:0 0 0 3px rgba(255,215,0,0.25);
+}
+.lock-star.active:hover{
+  background:#FFE7A3;
+}
 .pill-mini-warn{
   display:inline-block;font-size:10px;font-weight:600;
   background:#FFE5E5;color:#C0392B;
@@ -744,6 +775,7 @@ let masterMap={};   // 학번 → 원생마스터 row
 let targetList=[];  // 배정 대상 학생 [{sid,name,classCode,maymac,busyBlocks,source}]
 let consultants=[];
 let assignments={};  // idx → {consultantId,consultantName,dateId,timeId,date,startTime,endTime}
+let lockedDates=[];  // ['2026-07-10', ...]  — 자동 배정 시 이 날짜는 슬롯/학생 그대로 유지
 
 // 운영 설정 (편집 가능, localStorage 영구화)
 const DEFAULT_ANNOUNCEMENT_BODY = `**1. 상담 전 준비할 것**
@@ -790,6 +822,7 @@ function save(){
     localStorage.setItem('qs_target',JSON.stringify(targetList));
     localStorage.setItem('qs_master',JSON.stringify(masterMap));
     localStorage.setItem('qs_settings',JSON.stringify(settings));
+    localStorage.setItem('qs_locked',JSON.stringify(lockedDates));
   }catch(e){
     if(e && e.name && e.name.includes('Quota')){
       // 마스터가 너무 커서 한도 초과 → 마스터는 휘발성으로 fallback, 나머지는 보존
@@ -799,6 +832,7 @@ function save(){
         localStorage.setItem('qs_asgn',JSON.stringify(assignments));
         localStorage.setItem('qs_target',JSON.stringify(targetList));
         localStorage.setItem('qs_settings',JSON.stringify(settings));
+        localStorage.setItem('qs_locked',JSON.stringify(lockedDates));
       }catch{}
       console.warn('[저장 알림] 마스터 데이터 용량 초과로 마스터만 휘발성 처리. 새로고침 시 마스터 재업로드 필요.');
     }else{
@@ -813,6 +847,7 @@ function load(){
   try{assignments=JSON.parse(localStorage.getItem('qs_asgn'))||{};}catch{assignments={};}
   try{targetList=JSON.parse(localStorage.getItem('qs_target'))||[];}catch{targetList=[];}
   try{masterMap=JSON.parse(localStorage.getItem('qs_master'))||{};}catch{masterMap={};}
+  try{lockedDates=JSON.parse(localStorage.getItem('qs_locked'))||[];}catch{lockedDates=[];}
   try{
     const saved = JSON.parse(localStorage.getItem('qs_settings'))||{};
     settings = {...DEFAULT_SETTINGS, ...saved};  // 새 키 추가 시 기본값 병합
@@ -1187,7 +1222,7 @@ function exportBackup(){
     appName: 'QUETTA 수시상담배정',
     version: 1,
     exportedAt: new Date().toISOString(),
-    data: { consultants, assignments, targetList, masterMap }
+    data: { consultants, assignments, targetList, masterMap, lockedDates }
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json;charset=utf-8'});
   const url = URL.createObjectURL(blob);
@@ -1222,6 +1257,7 @@ function importBackup(file){
       assignments = (d.assignments && typeof d.assignments === 'object') ? d.assignments : {};
       targetList = Array.isArray(d.targetList) ? d.targetList : [];
       masterMap = (d.masterMap && typeof d.masterMap === 'object') ? d.masterMap : {};
+      lockedDates = Array.isArray(d.lockedDates) ? d.lockedDates : [];
 
       save();
       renderStudentTable();
@@ -1255,13 +1291,14 @@ function resetAll(){
   if(!confirm('⚠ 한 번 더 확인합니다.\n\n되돌릴 수 없습니다. 정말 진행할까요?'))return;
 
   // localStorage 키들 명시적으로 삭제 (다른 도메인 데이터 영향 X)
-  ['qs_cons','qs_asgn','qs_target','qs_master'].forEach(k=>localStorage.removeItem(k));
+  ['qs_cons','qs_asgn','qs_target','qs_master','qs_locked'].forEach(k=>localStorage.removeItem(k));
 
   // 메모리 상태도 초기화
   masterMap = {};
   targetList = [];
   consultants = [];
   assignments = {};
+  lockedDates = [];
 
   // 업로드 영역 done 클래스 제거
   document.getElementById('zone-master')?.classList.remove('done');
@@ -1561,6 +1598,20 @@ function runAssign(){
   },50);
 }
 
+// 날짜 고정 토글: 별 클릭 시 그 날짜 자동 배정에서 제외됨
+function toggleDateLock(date){
+  const i = lockedDates.indexOf(date);
+  if(i >= 0){
+    lockedDates.splice(i, 1);
+    showToast(`${formatKoreanDate(date)} 고정 해제`);
+  } else {
+    lockedDates.push(date);
+    showToast(`${formatKoreanDate(date)} 고정 · 자동 배정 시 보호됨`);
+  }
+  save();
+  renderResult();
+}
+
 // 단일 학생 배정 취소 + 빈자리 메우기
 // - 1순위: 기존 미배정 학생 풀
 // - 2순위: 빈 슬롯 날짜 이후 다른 슬롯에 배정된 학생 (이후 일정에서 끌어옴)
@@ -1657,51 +1708,77 @@ function reassignSingleStudent(idx){
 
 function _runAssign(){
   document.getElementById('algoLog').innerHTML='';
-  assignments={};
 
-  // 유효 슬롯 수집
+  // 고정된 날짜의 배정은 보존 (재배정 대상에서 제외)
+  const preservedAssignments = {};
+  Object.entries(assignments).forEach(([k, a]) => {
+    if(lockedDates.includes(a.date)) preservedAssignments[k] = a;
+  });
+  assignments = {...preservedAssignments};
+  const preservedCnt = Object.keys(preservedAssignments).length;
+  if(preservedCnt > 0){
+    log(`🔒 고정된 날짜 ${lockedDates.length}일 · ${preservedCnt}명 배정 보존`, 'ok');
+  }
+
+  // 유효 슬롯 수집 (고정된 날짜 슬롯은 제외)
   const allSlots=[];
+  let lockedSlotCnt = 0;
   for(const c of consultants){
     for(const db of (c.dates||[])){
       if(!db.date)continue;
+      if(lockedDates.includes(db.date)){
+        lockedSlotCnt += (db.times||[]).filter(t=>t.startTime&&t.endTime).length;
+        continue;
+      }
       for(const t of db.times){
         if(!t.startTime||!t.endTime)continue;
         allSlots.push({cid:c.id,cname:c.name,did:db.id,tid:t.id,date:db.date,st:t.startTime,et:t.endTime});
       }
     }
   }
-  log(`유효 슬롯: ${allSlots.length}개`);
+  log(`유효 슬롯: ${allSlots.length}개${lockedSlotCnt?` (고정 슬롯 ${lockedSlotCnt}개 제외)`:''}`);
 
-  // 학생 무작위 셔플 (Fisher-Yates) — 앞반/뒤반 차별 없이 균등하게 처리
-  let sorted=[...targetList.entries()];
+  if(!allSlots.length){
+    if(lockedDates.length){
+      log('⚠ 모든 날짜가 고정되어 재배정할 슬롯이 없습니다.', 'warn');
+    } else {
+      log('⚠ 등록된 슬롯이 없습니다. 담당자 & 슬롯 탭에서 추가해주세요.', 'warn');
+    }
+    save();updateStats();renderSlots();renderStudentTable();renderResult();updateConflictBanner();
+    return;
+  }
+
+  // 학생 셔플 — 단, 고정 날짜에 이미 배정된 학생은 제외
+  const reservedIdxs = new Set(Object.keys(preservedAssignments).map(k => parseInt(k)));
+  let sorted = [...targetList.entries()].filter(([i]) => !reservedIdxs.has(i));
   for(let i=sorted.length-1; i>0; i--){
     const j=Math.floor(Math.random()*(i+1));
     [sorted[i],sorted[j]]=[sorted[j],sorted[i]];
   }
-  // 생기부 제출자 우선: 셔플 후 안정 정렬로 제출자(true)가 앞으로
-  // (각 그룹 내부는 셔플된 무작위 순서 유지)
+  // 생기부 제출자 우선
   sorted.sort((a,b) => (b[1].submitted?1:0) - (a[1].submitted?1:0));
 
   const usedSlots=new Set();
   let doneN=0,failN=0;
   const failList=[];
 
-  // 담당자-날짜별 배정 카운트 추적 (Map: "cid|date" → count)
+  // 담당자-날짜별 카운트 (고정된 배정 포함해서 시작)
   const dayCount = new Map();
-  const maxPerDayMap = new Map();  // cid → maxPerDay
+  Object.values(preservedAssignments).forEach(a => {
+    const k = `${a.consultantId}|${a.date}`;
+    dayCount.set(k, (dayCount.get(k)||0) + 1);
+  });
+  const maxPerDayMap = new Map();
   consultants.forEach(c => maxPerDayMap.set(c.id, c.maxPerDay ?? 8));
 
-  // 전체 슬롯을 이른 날짜·시간 순으로 정렬 (한 번만)
   const sortedAllSlots = [...allSlots].sort((a,b) =>
     a.date.localeCompare(b.date) || a.st.localeCompare(b.st)
   );
 
   for(const[idx,student] of sorted){
     let ok=false;
-    // 사용 안 된 슬롯 중에서 시간충돌 없는 가장 이른 슬롯에 배정
     for(const slot of sortedAllSlots){
       if(usedSlots.has(slot.tid))continue;
-      // 담당자-날짜 한도 체크
       const dayKey = `${slot.cid}|${slot.date}`;
       const curCount = dayCount.get(dayKey) || 0;
       const maxAllowed = maxPerDayMap.get(slot.cid) ?? 8;
@@ -1720,7 +1797,7 @@ function _runAssign(){
   }
 
   save();updateStats();renderSlots();renderStudentTable();renderResult();updateConflictBanner();
-  log(`🩷 완료: ${doneN}명 배정`,'ok');
+  log(`🩷 완료: ${doneN}명 배정${preservedCnt?` (+ 고정 보존 ${preservedCnt}명)`:''}`,'ok');
   if(failN>0){
     log(`⚠ 미배정: ${failN}명 (수업 충돌로 가능한 슬롯 없음)`,'warn');
     failList.forEach(s=>log(`  · ${s.name} (${s.sid}, ${s.classCode||'-'})`,'warn'));
@@ -1792,13 +1869,15 @@ function renderResult(){
     const okN = groupRows.filter(r=>r.status==='ok').length;
     const conflictN = groupRows.filter(r=>r.status==='conflict').length;
     const unknownN = groupRows.filter(r=>r.status==='unknown').length;
+    const isLocked = lockedDates.includes(date);
     html+=`
-      <div class="date-group">
+      <div class="date-group${isLocked?' date-locked':''}">
         <div class="date-group-header">
           <div class="date-info">
             <span class="date-main">${date}</span>
             <span class="date-wd">(${getWd(date)})</span>
             <span class="date-count">${groupRows.length}명</span>
+            ${isLocked?'<span class="lock-badge" title="자동 배정 시 보호됨">🔒 고정됨</span>':''}
             <span class="date-status">
               <span class="st-ok" title="시간충돌 없음 (시간표 검증됨)">✓ ${okN}</span>
               ${conflictN?`<span class="st-conflict" title="본인 수업 시간과 충돌">⚠ ${conflictN}</span>`:''}
@@ -1832,6 +1911,9 @@ function renderResult(){
             </td>
           </tr>`).join('')}</tbody>
         </table>
+        <div class="date-lock-bar">
+          <button class="lock-star${isLocked?' active':''}" onclick="toggleDateLock('${date}')" title="${isLocked?'고정 해제':'이 날짜 고정 (자동 배정 시 보호됨)'}">${isLocked?'⭐':'☆'}</button>
+        </div>
       </div>`;
   });
 
