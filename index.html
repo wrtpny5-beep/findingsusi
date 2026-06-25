@@ -2140,14 +2140,23 @@ function _matchEssay(v,target){
   return false;
 }
 
+// 학생의 반 표기: 마이맥반(생활반) 형식. 한쪽이 없거나 #N/A면 있는 쪽만.
+function _buildClassDisplay(stu){
+  const mm = String(stu.maymac||'').trim();
+  const cc = String(stu.classCode||'').trim();
+  const mmValid = mm && mm !== '#N/A' && mm !== '?' && mm !== '확인필요';
+  if(mmValid && cc) return `${_esc(mm)}(${_esc(cc)})`;
+  if(mmValid) return _esc(mm);
+  if(cc) return _esc(cc);
+  return '-';
+}
+
 function buildFormHTML(stu, idx){
   const fd = stu.formData || {};
   const past = fd.past || Array(6).fill({});
   const plan = fd.plan || Array(6).fill({});
   const planY = CURRENT_GRADE;
-  const pastY = LAST_GRADE;
-
-  // 1번 자동 체크: 양식에 있다는 사실 자체가 "지원함" 의사를 표명한 학생이므로 ① 자동 체크
+  const pastY = LAST_GRADE;  // 1번 자동 체크: 양식에 있다는 사실 자체가 "지원함" 의사를 표명한 학생이므로 ① 자동 체크
   const apply1 = fd.apply ? _isYes(fd.apply) : (stu.source==='survey');
 
   // 2번/3번/4번은 작년 데이터에 없을 수 있음 → 있을 때만 체크
@@ -2202,7 +2211,7 @@ function buildFormHTML(stu, idx){
       <tr>
         <th class="hd-hs">인문 / 자연</th>
         <td class="ct">${isHum?'인문':''}${isSci?'자연':''}${(!isHum&&!isSci)?_esc(humSci):''}</td>
-        <th>반</th><td class="ct">${_esc(stu.classCode)}</td>
+        <th>마이맥반<br>(생활반)</th><td class="ct">${_buildClassDisplay(stu)}</td>
         <th>학번</th><td class="ct">${_esc(stu.sid)}</td>
         <th>이름</th><td class="ct">${_esc(stu.name)}</td>
       </tr>
