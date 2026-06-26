@@ -2702,13 +2702,46 @@ function renderBody(text){
 }
 
 // 안내문 인쇄 (학생 idx 배열)
-function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, title='수시 상담 안내문'}={}){
+function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, pdfDownload=false, pdfFilename='안내문.pdf', title='수시 상담 안내문'}={}){
   const w = window.open('', '_blank', 'width=900,height=1200');
   if(!w){alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도해주세요.');return;}
   const all = stuAsgnList.map(({stu,asgn}) => buildAnnouncementHTML(stu, asgn)).join('');
-  const printScript = autoprint
-    ? `window.addEventListener('load',()=>{setTimeout(()=>window.print(),500);});`
-    : `/* preview mode */`;
+
+  let actionScript;
+  if(pdfDownload){
+    // html2pdf.js로 PDF 다운로드 + 창 자동 닫기
+    const safeFilename = pdfFilename.replace(/'/g, '');
+    actionScript = `
+      const sc = document.createElement('script');
+      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+      sc.onload = () => {
+        // 폰트 로드 대기 후 변환
+        document.fonts.ready.then(() => setTimeout(() => {
+          const opts = {
+            margin: 0,
+            filename: '${safeFilename}',
+            image: { type: 'jpeg', quality: 0.97 },
+            html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff' },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            pagebreak: { mode: ['css', 'legacy'] }
+          };
+          html2pdf().set(opts).from(document.body).save().then(() => {
+            setTimeout(() => window.close(), 400);
+          }).catch(err => {
+            document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;">PDF 생성 실패: ' + err.message + '<br><br>창을 닫고 다시 시도해주세요.</div>';
+          });
+        }, 600));
+      };
+      sc.onerror = () => {
+        document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;">PDF 라이브러리 로드 실패. 외부 연결을 확인하세요.</div>';
+      };
+      document.head.appendChild(sc);
+    `;
+  } else if(autoprint){
+    actionScript = `window.addEventListener('load',()=>{setTimeout(()=>window.print(),500);});`;
+  } else {
+    actionScript = `/* preview mode */`;
+  }
 
   w.document.write(`<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8">
@@ -2790,18 +2823,20 @@ function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, title='수�
 </style>
 </head><body>${all}
 <script>
-  ${printScript}
+  ${actionScript}
 </`+`script>
 </body></html>`);
   w.document.close();
 }
 
 // 학생 1명 안내문 인쇄
+// 학생 1명 안내문 — PDF 다운로드
 function printAnnouncement(idx){
   const stu = targetList[idx];
   const asgn = assignments[idx];
   if(!stu || !asgn){alert('이 학생은 아직 배정되지 않았습니다.');return;}
-  _renderAnnouncementsInWindow([{stu,asgn}], {autoprint:true});
+  const filename = `안내문_${stu.name}_${asgn.date}.pdf`;
+  _renderAnnouncementsInWindow([{stu,asgn}], {autoprint:false, pdfDownload:true, pdfFilename:filename});
 }
 
 // 날짜별 일괄 안내문 인쇄
