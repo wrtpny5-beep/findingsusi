@@ -2954,15 +2954,57 @@ function _buildAnnouncementsDocHTML(stuAsgnList, title='수시 상담 안내문'
 </style></head><body>${all}</body></html>`;
 }
 
+// PDF 라이브러리 동적 로드 (페이지 head 로드 실패 시 fallback)
+let _pdfLibPromise = null;
+function loadPdfLib(){
+  if(typeof html2canvas !== 'undefined' && typeof window.jspdf !== 'undefined'){
+    return Promise.resolve();
+  }
+  if(_pdfLibPromise) return _pdfLibPromise;
+  _pdfLibPromise = new Promise((resolve, reject) => {
+    const urls = [
+      'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js',
+      'https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js',
+      'https://unpkg.com/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js'
+    ];
+    let idx = 0;
+    function tryLoad(){
+      if(idx >= urls.length){
+        _pdfLibPromise = null;
+        reject(new Error('모든 CDN에서 로드 실패'));
+        return;
+      }
+      const sc = document.createElement('script');
+      sc.src = urls[idx];
+      sc.onload = () => {
+        if(typeof html2canvas !== 'undefined' && typeof window.jspdf !== 'undefined'){
+          resolve();
+        } else {
+          idx++; tryLoad();
+        }
+      };
+      sc.onerror = () => { idx++; tryLoad(); };
+      document.head.appendChild(sc);
+    }
+    tryLoad();
+  });
+  return _pdfLibPromise;
+}
+
 // 학생 1명 안내문 — PDF 다운로드 (iframe 방식, 새 창 안 열림)
-function printAnnouncement(idx){
+async function printAnnouncement(idx){
   const stu = targetList[idx];
   const asgn = assignments[idx];
   if(!stu || !asgn){alert('이 학생은 아직 배정되지 않았습니다.');return;}
-  if(typeof html2canvas === 'undefined' || typeof window.jspdf === 'undefined'){
-    alert('PDF 라이브러리가 아직 로드되지 않았습니다. 잠시 후 다시 시도해주세요.');
+
+  try {
+    showToast('PDF 라이브러리 확인 중...');
+    await loadPdfLib();
+  } catch(err) {
+    alert('PDF 라이브러리 로드 실패.\n네트워크 연결 확인 후 다시 시도해주세요.\n\n오류: ' + err.message);
     return;
   }
+
   const filename = `안내문_${stu.name}_${asgn.date}.pdf`;
   showToast('PDF 생성 중...');
 
@@ -2975,7 +3017,6 @@ function printAnnouncement(idx){
   iframe.srcdoc = docHTML;
 
   iframe.onload = () => {
-    // 폰트 + 렌더 대기 (충분히)
     setTimeout(() => {
       const idoc = iframe.contentDocument;
       const target = idoc.querySelector('.ann-page');
@@ -2993,7 +3034,6 @@ function printAnnouncement(idx){
         const pdf = new jsPDF('p', 'mm', 'a4');
         pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
 
-        // blob → download 링크 강제 클릭
         const blob = pdf.output('blob');
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -3012,7 +3052,7 @@ function printAnnouncement(idx){
         document.body.removeChild(iframe);
         alert('PDF 생성 실패: ' + err.message);
       });
-    }, 1200);  // 폰트 로드 충분히 대기
+    }, 1200);
   };
 }
 
