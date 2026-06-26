@@ -272,6 +272,26 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
 
 /* 답변 조회 탭 */
 .ans-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px 22px;margin-bottom:14px;}
+
+/* 생기부 제출 토글 (답변조회 카드 헤더) */
+.submit-toggle{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 11px;border-radius:18px;
+  background:#f3f3f5;color:#888;
+  font-size:11.5px;font-weight:600;letter-spacing:-0.3px;
+  cursor:pointer;user-select:none;
+  border:1.5px solid #e2e2e8;
+  transition:all 0.15s ease;
+  margin-left:auto;
+}
+.submit-toggle input{cursor:pointer;accent-color:#F59E0B;margin:0;}
+.submit-toggle:hover{background:#eee;border-color:#d0d0d8;}
+.submit-toggle.on{
+  background:linear-gradient(135deg, #FFF4B8 0%, #FFE7A3 100%);
+  color:#8B6A1D;border-color:#FFD700;
+  box-shadow:0 0 0 2px rgba(255,215,0,0.18);
+}
+.submit-toggle.on:hover{background:linear-gradient(135deg, #FFE7A3 0%, #FFD978 100%);}
 .ans-header{display:flex;align-items:baseline;gap:10px;padding-bottom:10px;border-bottom:1px solid var(--border);margin-bottom:12px;flex-wrap:wrap;}
 .ans-sid{font-weight:600;color:var(--muted);font-size:12px;}
 .ans-name{font-size:15px;font-weight:700;color:var(--dark);}
@@ -532,6 +552,14 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
           <option value="hak">학종·교과 위주</option>
           <option value="essay">논술 위주</option>
           <option value="none">미응답</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px;">생기부</label>
+        <select id="ansSubFilter" onchange="renderAnswers()" style="min-width:130px;">
+          <option value="">전체</option>
+          <option value="yes">📎 제출자만</option>
+          <option value="no">미제출만</option>
         </select>
       </div>
       <div>
@@ -1952,6 +1980,16 @@ function renderResult(){
 // 학생의 수시 지원 유형 분류
 // 'hak' = 학종/교과 포함, 'essay' = 논술 포함, 'none' = 미응답/빈값
 // 혼합("학종+논술")인 경우 두 그룹 모두에 매칭됨 (포함관계 검사)
+// 답변조회 탭에서 생기부 제출 체크박스 토글
+function toggleSubmitted(idx){
+  const s = targetList[idx];
+  if(!s) return;
+  s.submitted = !s.submitted;
+  save();
+  // 답변조회 화면만 부분 갱신 (전체 재렌더하면 스크롤 튐 → 토글 즉시 반영만)
+  renderAnswers();
+}
+
 function getApplyTypeFlags(typeStr){
   const t = String(typeStr || '').trim();
   return {
@@ -1984,6 +2022,7 @@ function renderAnswers(){
 
   const filterMM = sel.value;
   const filterType = document.getElementById('ansTypeFilter').value;
+  const filterSub = document.getElementById('ansSubFilter')?.value || '';
   const nameQuery = (document.getElementById('ansNameSearch').value || '').trim().toLowerCase();
   const sortMode = document.getElementById('ansSort').value;
 
@@ -1997,6 +2036,9 @@ function renderAnswers(){
       if(filterType==='none') return f.isEmpty;
       return true;
     });
+  }
+  if(filterSub){
+    students = students.filter(s => filterSub==='yes' ? s.submitted===true : !s.submitted);
   }
   if(nameQuery) students = students.filter(s => String(s.name||'').toLowerCase().includes(nameQuery) || String(s.sid||'').includes(nameQuery));
 
@@ -2017,17 +2059,28 @@ function renderAnswers(){
   const typeLabel = filterType==='hak'?'학종·교과 위주':(filterType==='essay'?'논술 위주':(filterType==='none'?'미응답':''));
   const filterLabel = filterMM ? `마이맥반 ${filterMM}` : '전체';
   const typeLabelText = typeLabel ? ` · 유형: <b>${typeLabel}</b>` : '';
+  const subLabel = filterSub==='yes'?' · 생기부 <b>제출자만</b>':(filterSub==='no'?' · 생기부 <b>미제출만</b>':'');
   const searchLabel = nameQuery ? ` · 검색: <b>${_esc(nameQuery)}</b>` : '';
-  let html = `<div class="ans-summary card">📋 ${filterLabel}${typeLabelText}${searchLabel} · 총 <b>${students.length}명</b></div>`;
+  // 현재 표시된 학생 중 생기부 제출자 수
+  const subCount = students.filter(s => s.submitted===true).length;
+  const subStat = students.length ? ` <span style="color:#8B6A1D;">(📎 제출 ${subCount}명)</span>` : '';
+  let html = `<div class="ans-summary card">📋 ${filterLabel}${typeLabelText}${subLabel}${searchLabel} · 총 <b>${students.length}명</b>${subStat}</div>`;
 
   for(const s of students){
     const fd = s.formData || {};
+    // 학생의 실제 인덱스 (targetList에서 위치)
+    const realIdx = targetList.indexOf(s);
+    const isSubmitted = s.submitted === true;
     html += `<div class="ans-card">
       <div class="ans-header">
         <span class="ans-sid">${_esc(s.sid)}</span>
         <span class="ans-name">${_esc(s.name)}</span>
         <span class="ans-class">${_esc(s.classCode||'-')}</span>
         <span class="ans-mm">마이맥 ${_esc(s.maymac)}</span>
+        <label class="submit-toggle${isSubmitted?' on':''}" title="체크 시 자동 배정에서 우선 처리됨">
+          <input type="checkbox" ${isSubmitted?'checked':''} onchange="toggleSubmitted(${realIdx})">
+          <span>📎 생기부 제출</span>
+        </label>
       </div>
       <div class="ans-single-grid">
         <div class="ans-single-row"><span class="ans-single-q">수시지원여부</span><span class="ans-single-v">${_esc(fd.apply||'-')}</span></div>
