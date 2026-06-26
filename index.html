@@ -6,6 +6,7 @@
 <title>수시 상담 배정 — QUETTA</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦄</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap');
 :root{
@@ -2909,14 +2910,110 @@ function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, pdfDownload=
   w.document.close();
 }
 
-// 학생 1명 안내문 인쇄
-// 학생 1명 안내문 — PDF 다운로드
+// 안내문 HTML 문서 빌드 (새 창/iframe 공용)
+function _buildAnnouncementsDocHTML(stuAsgnList, title='수시 상담 안내문'){
+  const all = stuAsgnList.map(({stu,asgn}) => buildAnnouncementHTML(stu, asgn)).join('');
+  return `<!DOCTYPE html>
+<html lang="ko"><head><meta charset="UTF-8">
+<title>${title} - ${stuAsgnList.length}명</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Bagel+Fat+One&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Noto Sans KR',sans-serif;color:#3D3660;font-size:11pt;line-height:1.65;background:#fff;padding:0;margin:0;}
+  .ann-page{
+    background:#fff;width:210mm;height:297mm;padding:22mm 20mm 24mm;margin:0;
+    position:relative;overflow:hidden;
+    background-image:
+      radial-gradient(circle at 12% 8%, rgba(212,214,252,.35) 0, transparent 14%),
+      radial-gradient(circle at 92% 12%, rgba(250,222,234,.4) 0, transparent 16%),
+      radial-gradient(circle at 5% 92%, rgba(254,238,223,.4) 0, transparent 16%);
+  }
+  .ann-title-wrap{text-align:center;margin-bottom:18px;}
+  .ann-title{font-family:'Noto Sans KR',sans-serif;font-size:22pt;font-weight:700;color:#3D3660;letter-spacing:-1px;line-height:1.2;}
+  .ann-info-card{background:linear-gradient(135deg, #D4D6FC 0%, #FADEEA 100%);border-radius:14px;padding:13px 22px;margin-bottom:20px;}
+  .ann-info-row{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;font-size:10.5pt;}
+  .ann-info-label{color:#6a5e8c;font-weight:500;}
+  .ann-info-val{font-family:'Noto Sans KR',sans-serif;color:#3D3660;font-weight:700;font-size:11pt;letter-spacing:-0.3px;}
+  .ann-info-name{font-family:'Noto Sans KR',sans-serif;font-size:12pt;font-weight:900;letter-spacing:-0.3px;}
+  .ann-info-divider{color:#bfbafc;font-weight:300;margin:0 4px;}
+  .ann-main{background:linear-gradient(135deg, #FEEEDF 0%, #FADEEA 100%);border-radius:14px;padding:20px 24px;margin-bottom:24px;position:relative;}
+  .ann-main-label{display:inline-block;background:#3D3660;color:#fff;font-size:10pt;font-weight:700;padding:3px 12px;border-radius:12px;margin-bottom:14px;letter-spacing:0.5px;}
+  .ann-datetime{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:12px;border-bottom:1.5px dashed #f0c4d8;}
+  .ann-datetime-text{font-family:'Noto Sans KR',sans-serif;font-weight:700;font-size:18pt;color:#3D3660;letter-spacing:-1.2px;line-height:1.2;}
+  .ann-duration{font-size:10.5pt;color:#9a7a8a;font-weight:500;}
+  .ann-place-line{font-size:11.5pt;color:#3D3660;line-height:1.7;}
+  .ann-place-line b{color:#6a52a8;font-weight:700;}
+  .ann-body{padding:4px 4px 0;}
+  .ann-p{font-size:11pt;color:#3D3660;line-height:1.75;margin-bottom:12px;}
+  .ann-p:last-child{margin-bottom:0;}
+  .ann-p b{color:#6a52a8;font-weight:700;}
+  .ann-brand{position:absolute;bottom:14mm;right:20mm;}
+  .ann-brand img{height:10mm;width:auto;display:block;opacity:.85;}
+</style></head><body>${all}</body></html>`;
+}
+
+// 학생 1명 안내문 — PDF 다운로드 (iframe 방식, 새 창 안 열림)
 function printAnnouncement(idx){
   const stu = targetList[idx];
   const asgn = assignments[idx];
   if(!stu || !asgn){alert('이 학생은 아직 배정되지 않았습니다.');return;}
+  if(typeof html2canvas === 'undefined' || typeof window.jspdf === 'undefined'){
+    alert('PDF 라이브러리가 아직 로드되지 않았습니다. 잠시 후 다시 시도해주세요.');
+    return;
+  }
   const filename = `안내문_${stu.name}_${asgn.date}.pdf`;
-  _renderAnnouncementsInWindow([{stu,asgn}], {autoprint:false, pdfDownload:true, pdfFilename:filename});
+  showToast('PDF 생성 중...');
+
+  // 숨겨진 iframe 생성
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:210mm;height:297mm;border:0;background:#fff;';
+  document.body.appendChild(iframe);
+
+  const docHTML = _buildAnnouncementsDocHTML([{stu, asgn}], '안내문');
+  iframe.srcdoc = docHTML;
+
+  iframe.onload = () => {
+    // 폰트 + 렌더 대기 (충분히)
+    setTimeout(() => {
+      const idoc = iframe.contentDocument;
+      const target = idoc.querySelector('.ann-page');
+      if(!target){
+        document.body.removeChild(iframe);
+        alert('PDF 생성 실패: .ann-page 요소 없음');
+        return;
+      }
+      html2canvas(target, {
+        scale: 2, useCORS: true, letterRendering: true,
+        backgroundColor: '#ffffff', logging: false
+      }).then(canvas => {
+        const imgData = canvas.toDataURL('image/jpeg', 0.97);
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+
+        // blob → download 링크 강제 클릭
+        const blob = pdf.output('blob');
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          document.body.removeChild(iframe);
+          showToast(`✓ ${filename} 다운로드 완료`);
+        }, 600);
+      }).catch(err => {
+        document.body.removeChild(iframe);
+        alert('PDF 생성 실패: ' + err.message);
+      });
+    }, 1200);  // 폰트 로드 충분히 대기
+  };
 }
 
 // 날짜별 일괄 안내문 인쇄
