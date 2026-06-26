@@ -2765,7 +2765,7 @@ function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, pdfDownload=
     // html2pdf.js로 PDF 다운로드 + 창 자동 닫기
     const safeFilename = pdfFilename.replace(/'/g, '');
     actionScript = `
-      // PDF 모드: 화면용 스타일 제거 (body padding/background, 카드 그림자)
+      // PDF 모드: 화면용 스타일 제거
       document.body.style.padding = '0';
       document.body.style.background = '#fff';
       document.querySelectorAll('.ann-page').forEach(el => {
@@ -2776,19 +2776,30 @@ function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, pdfDownload=
       const sc = document.createElement('script');
       sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
       sc.onload = () => {
-        // 폰트 로드 대기 후 변환
         document.fonts.ready.then(() => setTimeout(() => {
-          const opts = {
-            margin: 0,
-            filename: '${safeFilename}',
-            image: { type: 'jpeg', quality: 0.97 },
-            html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', windowWidth: 794 },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-            pagebreak: { mode: ['css', 'legacy'] }
-          };
-          // body 전체가 아니라 .ann-page 컨테이너만 변환 (불필요 여백 방지)
           const src = document.querySelector('.ann-page') || document.body;
-          html2pdf().set(opts).from(src).save().then(() => {
+          // html2canvas로 캡처 → jsPDF로 직접 한 페이지에 박음 (페이지 분할 회피)
+          html2canvas(src, {
+            scale: 2, useCORS: true, letterRendering: true,
+            backgroundColor: '#ffffff', windowWidth: 794
+          }).then(canvas => {
+            const imgData = canvas.toDataURL('image/jpeg', 0.97);
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfW = pdf.internal.pageSize.getWidth();   // 210
+            const pdfH = pdf.internal.pageSize.getHeight();  // 297
+            const ratio = canvas.height / canvas.width;
+            // 너비 우선 fit
+            let renderW = pdfW, renderH = pdfW * ratio;
+            // 높이가 페이지를 넘으면 높이 기준으로 fit (좌우 여백 생김)
+            if(renderH > pdfH){
+              renderH = pdfH;
+              renderW = pdfH / ratio;
+            }
+            const x = (pdfW - renderW) / 2;
+            const y = 0;
+            pdf.addImage(imgData, 'JPEG', x, y, renderW, renderH);
+            pdf.save('${safeFilename}');
             setTimeout(() => window.close(), 400);
           }).catch(err => {
             document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;">PDF 생성 실패: ' + err.message + '<br><br>창을 닫고 다시 시도해주세요.</div>';
