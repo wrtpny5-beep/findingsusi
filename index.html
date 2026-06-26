@@ -2765,12 +2765,17 @@ function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, pdfDownload=
     // html2pdf.js로 PDF 다운로드 + 창 자동 닫기
     const safeFilename = pdfFilename.replace(/'/g, '');
     actionScript = `
-      // PDF 모드: 화면용 스타일 제거
+      // PDF 모드: 페이지를 정확히 A4 크기(210×297mm)로 강제 → fit 정확도 보장
       document.body.style.padding = '0';
       document.body.style.background = '#fff';
+      document.body.style.margin = '0';
       document.querySelectorAll('.ann-page').forEach(el => {
         el.style.boxShadow = 'none';
         el.style.margin = '0';
+        el.style.minHeight = '0';
+        el.style.height = '297mm';
+        el.style.maxHeight = '297mm';
+        el.style.overflow = 'hidden';
       });
 
       const sc = document.createElement('script');
@@ -2778,29 +2783,30 @@ function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, pdfDownload=
       sc.onload = () => {
         document.fonts.ready.then(() => setTimeout(() => {
           const src = document.querySelector('.ann-page') || document.body;
-          // html2canvas로 캡처 → jsPDF로 직접 한 페이지에 박음 (페이지 분할 회피)
           html2canvas(src, {
             scale: 2, useCORS: true, letterRendering: true,
-            backgroundColor: '#ffffff', windowWidth: 794
+            backgroundColor: '#ffffff'
           }).then(canvas => {
             const imgData = canvas.toDataURL('image/jpeg', 0.97);
             const { jsPDF } = window.jspdf;
             const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfW = pdf.internal.pageSize.getWidth();   // 210
-            const pdfH = pdf.internal.pageSize.getHeight();  // 297
-            const ratio = canvas.height / canvas.width;
-            // 너비 우선 fit
-            let renderW = pdfW, renderH = pdfW * ratio;
-            // 높이가 페이지를 넘으면 높이 기준으로 fit (좌우 여백 생김)
-            if(renderH > pdfH){
-              renderH = pdfH;
-              renderW = pdfH / ratio;
-            }
-            const x = (pdfW - renderW) / 2;
-            const y = 0;
-            pdf.addImage(imgData, 'JPEG', x, y, renderW, renderH);
-            pdf.save('${safeFilename}');
-            setTimeout(() => window.close(), 400);
+            const pdfW = pdf.internal.pageSize.getWidth();
+            const pdfH = pdf.internal.pageSize.getHeight();
+            // 페이지 전체 강제 채움 (.ann-page가 이미 정확히 A4라 비율 OK)
+            pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
+
+            // 명시적 다운로드 트리거 (save() 대신 blob + 링크 클릭)
+            const blob = pdf.output('blob');
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '${safeFilename}';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+              URL.revokeObjectURL(url);
+              try { window.close(); } catch(_){}
+            }, 600);
           }).catch(err => {
             document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;">PDF 생성 실패: ' + err.message + '<br><br>창을 닫고 다시 시도해주세요.</div>';
           });
