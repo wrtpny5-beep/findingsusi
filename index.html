@@ -6,7 +6,7 @@
 <title>수시 상담 배정 — QUETTA</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦄</text></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="html2pdf.bundle.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap');
 :root{
@@ -1029,7 +1029,15 @@ function loadMaster(file){
       name:  headers.indexOf('성명'),
       phoneStu:  headers.indexOf('학생HP'),
       phoneGuardName: headers.indexOf('보호자'),
-      phoneGuard:    headers.indexOf('보호자HP')
+      phoneGuard:    headers.indexOf('보호자HP'),
+      // 출신고: 헤더 이름 후보 우선, 없으면 CG열(84번째, 0-based)
+      hsSchool: (() => {
+        for(const c of ['출신고','출신고교','출신학교','고교','고등학교','출신 고등학교']){
+          const i = headers.indexOf(c);
+          if(i >= 0) return i;
+        }
+        return 84;  // CG열 fallback
+      })()
     };
     if(idx.sid < 0){
       alert('마스터 파일에 "학번" 컬럼이 없습니다.');
@@ -1069,6 +1077,7 @@ function loadMaster(file){
         학생HP: idx.phoneStu>=0 ? String(row[idx.phoneStu]||'').trim() : '',
         보호자: idx.phoneGuardName>=0 ? String(row[idx.phoneGuardName]||'').trim() : '',
         보호자HP: idx.phoneGuard>=0 ? String(row[idx.phoneGuard]||'').trim() : '',
+        출신고: idx.hsSchool>=0 && idx.hsSchool<row.length ? String(row[idx.hsSchool]||'').trim() : '',
         subjects
       };
     });
@@ -2447,7 +2456,7 @@ function buildFormHTML(stu, idx){
         <th>이름</th><td class="ct">${_esc(stu.name)}</td>
       </tr>
       <tr>
-        <th>출신고</th><td colspan="3">${_esc(fd.hs)}</td>
+        <th>출신고</th><td colspan="3">${_esc(masterMap[stu.sid]?.출신고 || fd.hs || '')}</td>
         <th>재학(휴학) 중인<br>대학 / 학과</th><td colspan="3">${_esc(fd.curCollege)}</td>
       </tr>
     </table>
@@ -2756,73 +2765,14 @@ function renderBody(text){
 }
 
 // 안내문 인쇄 (학생 idx 배열)
-function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, pdfDownload=false, pdfFilename='안내문.pdf', title='수시 상담 안내문'}={}){
+function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, title='수시 상담 안내문'}={}){
   const w = window.open('', '_blank', 'width=900,height=1200');
   if(!w){alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도해주세요.');return;}
   const all = stuAsgnList.map(({stu,asgn}) => buildAnnouncementHTML(stu, asgn)).join('');
 
-  let actionScript;
-  if(pdfDownload){
-    // html2pdf.js로 PDF 다운로드 + 창 자동 닫기
-    const safeFilename = pdfFilename.replace(/'/g, '');
-    actionScript = `
-      // PDF 모드: 페이지를 정확히 A4 크기(210×297mm)로 강제 → fit 정확도 보장
-      document.body.style.padding = '0';
-      document.body.style.background = '#fff';
-      document.body.style.margin = '0';
-      document.querySelectorAll('.ann-page').forEach(el => {
-        el.style.boxShadow = 'none';
-        el.style.margin = '0';
-        el.style.minHeight = '0';
-        el.style.height = '297mm';
-        el.style.maxHeight = '297mm';
-        el.style.overflow = 'hidden';
-      });
-
-      const sc = document.createElement('script');
-      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-      sc.onload = () => {
-        document.fonts.ready.then(() => setTimeout(() => {
-          const src = document.querySelector('.ann-page') || document.body;
-          html2canvas(src, {
-            scale: 2, useCORS: true, letterRendering: true,
-            backgroundColor: '#ffffff'
-          }).then(canvas => {
-            const imgData = canvas.toDataURL('image/jpeg', 0.97);
-            const { jsPDF } = window.jspdf;
-            const pdf = new jsPDF('p', 'mm', 'a4');
-            const pdfW = pdf.internal.pageSize.getWidth();
-            const pdfH = pdf.internal.pageSize.getHeight();
-            // 페이지 전체 강제 채움 (.ann-page가 이미 정확히 A4라 비율 OK)
-            pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
-
-            // 명시적 다운로드 트리거 (save() 대신 blob + 링크 클릭)
-            const blob = pdf.output('blob');
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = '${safeFilename}';
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(() => {
-              URL.revokeObjectURL(url);
-              try { window.close(); } catch(_){}
-            }, 600);
-          }).catch(err => {
-            document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;">PDF 생성 실패: ' + err.message + '<br><br>창을 닫고 다시 시도해주세요.</div>';
-          });
-        }, 600));
-      };
-      sc.onerror = () => {
-        document.body.innerHTML = '<div style="padding:40px;font-family:sans-serif;">PDF 라이브러리 로드 실패. 외부 연결을 확인하세요.</div>';
-      };
-      document.head.appendChild(sc);
-    `;
-  } else if(autoprint){
-    actionScript = `window.addEventListener('load',()=>{setTimeout(()=>window.print(),500);});`;
-  } else {
-    actionScript = `/* preview mode */`;
-  }
+  const actionScript = autoprint
+    ? `window.addEventListener('load',()=>{setTimeout(()=>window.print(),500);});`
+    : `/* preview mode */`;
 
   w.document.write(`<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8">
@@ -2835,14 +2785,13 @@ function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, pdfDownload=
   body{font-family:'Noto Sans KR',sans-serif;color:#3D3660;font-size:11pt;line-height:1.65;background:#e5e5e5;padding:20px;}
   /* A4 세로 */
   .ann-page{
-    background:#fff;width:210mm;min-height:297mm;padding:22mm 20mm 24mm;margin:0 auto 16px;
-    box-shadow:0 4px 24px rgba(60,40,90,.12);page-break-after:always;position:relative;
+    background:#fff;width:210mm;height:297mm;padding:22mm 20mm 24mm;margin:0 auto 16px;
+    box-shadow:0 4px 24px rgba(60,40,90,.12);position:relative;overflow:hidden;
     background-image:
       radial-gradient(circle at 12% 8%, rgba(212,214,252,.35) 0, transparent 14%),
       radial-gradient(circle at 92% 12%, rgba(250,222,234,.4) 0, transparent 16%),
       radial-gradient(circle at 5% 92%, rgba(254,238,223,.4) 0, transparent 16%);
   }
-  .ann-page:last-child{page-break-after:auto;}
 
   /* 상단 타이틀 */
   .ann-title-wrap{text-align:center;margin-bottom:18px;}
@@ -2911,14 +2860,30 @@ function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, pdfDownload=
 }
 
 // 안내문 HTML 문서 빌드 (새 창/iframe 공용)
-function _buildAnnouncementsDocHTML(stuAsgnList, title='수시 상담 안내문'){
-  const all = stuAsgnList.map(({stu,asgn}) => buildAnnouncementHTML(stu, asgn)).join('');
-  return `<!DOCTYPE html>
+// 학생 1명 안내문 — PDF 자동 다운로드 (iframe 방식, 새 창 안 열림)
+function printAnnouncement(idx){
+  const stu = targetList[idx];
+  const asgn = assignments[idx];
+  if(!stu || !asgn){alert('이 학생은 아직 배정되지 않았습니다.');return;}
+  if(typeof html2canvas === 'undefined' || typeof window.jspdf === 'undefined'){
+    alert('PDF 라이브러리(html2pdf.bundle.min.js)가 같은 폴더에 없습니다.\nindex.html과 같은 위치에 업로드되었는지 확인해주세요.');
+    return;
+  }
+  const filename = `안내문_${stu.name}_${asgn.date}.pdf`;
+  showToast('PDF 생성 중...');
+
+  // 숨겨진 iframe 생성 (화면 밖)
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:210mm;height:297mm;border:0;background:#fff;';
+  document.body.appendChild(iframe);
+
+  // 안내문 HTML 작성 (단일 페이지, A4 정확 크기)
+  const annHTML = buildAnnouncementHTML(stu, asgn);
+  const docHTML = `<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8">
-<title>${title} - ${stuAsgnList.length}명</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Bagel+Fat+One&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   body{font-family:'Noto Sans KR',sans-serif;color:#3D3660;font-size:11pt;line-height:1.65;background:#fff;padding:0;margin:0;}
@@ -2951,69 +2916,7 @@ function _buildAnnouncementsDocHTML(stuAsgnList, title='수시 상담 안내문'
   .ann-p b{color:#6a52a8;font-weight:700;}
   .ann-brand{position:absolute;bottom:14mm;right:20mm;}
   .ann-brand img{height:10mm;width:auto;display:block;opacity:.85;}
-</style></head><body>${all}</body></html>`;
-}
-
-// PDF 라이브러리 동적 로드 (페이지 head 로드 실패 시 fallback)
-let _pdfLibPromise = null;
-function loadPdfLib(){
-  if(typeof html2canvas !== 'undefined' && typeof window.jspdf !== 'undefined'){
-    return Promise.resolve();
-  }
-  if(_pdfLibPromise) return _pdfLibPromise;
-  _pdfLibPromise = new Promise((resolve, reject) => {
-    const urls = [
-      'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js',
-      'https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js',
-      'https://unpkg.com/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js'
-    ];
-    let idx = 0;
-    function tryLoad(){
-      if(idx >= urls.length){
-        _pdfLibPromise = null;
-        reject(new Error('모든 CDN에서 로드 실패'));
-        return;
-      }
-      const sc = document.createElement('script');
-      sc.src = urls[idx];
-      sc.onload = () => {
-        if(typeof html2canvas !== 'undefined' && typeof window.jspdf !== 'undefined'){
-          resolve();
-        } else {
-          idx++; tryLoad();
-        }
-      };
-      sc.onerror = () => { idx++; tryLoad(); };
-      document.head.appendChild(sc);
-    }
-    tryLoad();
-  });
-  return _pdfLibPromise;
-}
-
-// 학생 1명 안내문 — PDF 다운로드 (iframe 방식, 새 창 안 열림)
-async function printAnnouncement(idx){
-  const stu = targetList[idx];
-  const asgn = assignments[idx];
-  if(!stu || !asgn){alert('이 학생은 아직 배정되지 않았습니다.');return;}
-
-  try {
-    showToast('PDF 라이브러리 확인 중...');
-    await loadPdfLib();
-  } catch(err) {
-    alert('PDF 라이브러리 로드 실패.\n네트워크 연결 확인 후 다시 시도해주세요.\n\n오류: ' + err.message);
-    return;
-  }
-
-  const filename = `안내문_${stu.name}_${asgn.date}.pdf`;
-  showToast('PDF 생성 중...');
-
-  // 숨겨진 iframe 생성
-  const iframe = document.createElement('iframe');
-  iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:210mm;height:297mm;border:0;background:#fff;';
-  document.body.appendChild(iframe);
-
-  const docHTML = _buildAnnouncementsDocHTML([{stu, asgn}], '안내문');
+</style></head><body>${annHTML}</body></html>`;
   iframe.srcdoc = docHTML;
 
   iframe.onload = () => {
@@ -3022,7 +2925,7 @@ async function printAnnouncement(idx){
       const target = idoc.querySelector('.ann-page');
       if(!target){
         document.body.removeChild(iframe);
-        alert('PDF 생성 실패: .ann-page 요소 없음');
+        alert('PDF 생성 실패: 안내문 요소 없음');
         return;
       }
       html2canvas(target, {
@@ -3033,7 +2936,7 @@ async function printAnnouncement(idx){
         const { jsPDF } = window.jspdf;
         const pdf = new jsPDF('p', 'mm', 'a4');
         pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
-
+        // blob + 강제 다운로드
         const blob = pdf.output('blob');
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -3046,8 +2949,8 @@ async function printAnnouncement(idx){
           document.body.removeChild(a);
           URL.revokeObjectURL(url);
           document.body.removeChild(iframe);
-          showToast(`✓ ${filename} 다운로드 완료`);
-        }, 600);
+          showToast(`✓ ${filename}`);
+        }, 500);
       }).catch(err => {
         document.body.removeChild(iframe);
         alert('PDF 생성 실패: ' + err.message);
@@ -3055,6 +2958,7 @@ async function printAnnouncement(idx){
     }, 1200);
   };
 }
+
 
 // 날짜별 일괄 안내문 인쇄
 function printDateAnnouncements(date){
