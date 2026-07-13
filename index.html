@@ -2727,6 +2727,10 @@ function buildAnnouncementHTML(stu, asgn){
   const location = _esc(settings.location || DEFAULT_SETTINGS.location);
   const consultType = _esc(settings.consultType || DEFAULT_SETTINGS.consultType);
 
+  // 학생 상태
+  const isSubmitted = stu.submitted === true;
+  const hasSurvey = hasSurveyResponse(stu.formData);
+
   return `
   <section class="ann-page">
     <div class="ann-title-wrap">
@@ -2759,6 +2763,22 @@ function buildAnnouncementHTML(stu, asgn){
         <div class="ann-place-line">
           <b>${location}</b>에서 <b>${consultType}</b> 상담이 예정되어 있습니다.
         </div>
+      </div>
+    </div>
+
+    <div class="ann-status-card">
+      <div class="ann-status-title">📋 상담 준비 상태</div>
+      <div class="ann-status-row">
+        <span class="ann-status-label">생기부 제출</span>
+        ${isSubmitted
+          ? '<span class="ann-status-badge ann-status-ok">✓ 제출 완료</span>'
+          : '<span class="ann-status-badge ann-status-no">✗ 미제출</span><span class="ann-status-note">→ 상담 전에 반드시 제출해 주세요</span>'}
+      </div>
+      <div class="ann-status-row">
+        <span class="ann-status-label">수시 희망 설문</span>
+        ${hasSurvey
+          ? '<span class="ann-status-badge ann-status-ok">✓ 응답 완료</span>'
+          : '<span class="ann-status-badge ann-status-no">✗ 미응답</span><span class="ann-status-note">→ 상담 전 행정실에 방문해 응답해 주세요</span>'}
       </div>
     </div>
 
@@ -2859,6 +2879,14 @@ function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, title='수�
   .ann-p b{color:#6a52a8;font-weight:700;}
 
   /* 하단 로고 */
+  .ann-status-card{background:#F5F3FA;border-radius:12px;padding:14px 18px;margin-bottom:20px;border:1px solid rgba(106,82,168,.08);}
+  .ann-status-title{font-size:10pt;font-weight:700;color:#6a52a8;margin-bottom:8px;letter-spacing:-0.3px;}
+  .ann-status-row{display:flex;align-items:center;gap:10px;font-size:10.5pt;line-height:1.7;flex-wrap:wrap;}
+  .ann-status-label{color:#3D3660;font-weight:500;min-width:78px;}
+  .ann-status-badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:9.5pt;font-weight:700;letter-spacing:-0.3px;}
+  .ann-status-ok{background:#DEF7E5;color:#1e7d3a;}
+  .ann-status-no{background:#FFE0E0;color:#B12828;}
+  .ann-status-note{font-size:9.5pt;color:#9a3838;font-weight:500;}
   .ann-brand{position:absolute;bottom:14mm;right:20mm;}
   .ann-brand img{height:10mm;width:auto;display:block;opacity:.85;}
 
@@ -2931,6 +2959,14 @@ function printAnnouncement(idx){
   .ann-p{font-size:11pt;color:#3D3660;line-height:1.75;margin-bottom:12px;}
   .ann-p:last-child{margin-bottom:0;}
   .ann-p b{color:#6a52a8;font-weight:700;}
+  .ann-status-card{background:#F5F3FA;border-radius:12px;padding:14px 18px;margin-bottom:20px;border:1px solid rgba(106,82,168,.08);}
+  .ann-status-title{font-size:10pt;font-weight:700;color:#6a52a8;margin-bottom:8px;letter-spacing:-0.3px;}
+  .ann-status-row{display:flex;align-items:center;gap:10px;font-size:10.5pt;line-height:1.7;flex-wrap:wrap;}
+  .ann-status-label{color:#3D3660;font-weight:500;min-width:78px;}
+  .ann-status-badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:9.5pt;font-weight:700;letter-spacing:-0.3px;}
+  .ann-status-ok{background:#DEF7E5;color:#1e7d3a;}
+  .ann-status-no{background:#FFE0E0;color:#B12828;}
+  .ann-status-note{font-size:9.5pt;color:#9a3838;font-weight:500;}
   .ann-brand{position:absolute;bottom:14mm;right:20mm;}
   .ann-brand img{height:10mm;width:auto;display:block;opacity:.85;}
 </style></head><body>${annHTML}</body></html>`;
