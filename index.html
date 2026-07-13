@@ -174,6 +174,12 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
   padding:1px 6px;border-radius:6px;margin-left:4px;
   vertical-align:middle;letter-spacing:-0.3px;
 }
+.pill-mini-info{
+  display:inline-block;font-size:10px;font-weight:600;
+  background:#FFF0DE;color:#B45309;
+  padding:1px 6px;border-radius:6px;margin-left:4px;
+  vertical-align:middle;letter-spacing:-0.3px;
+}
 .conflict-reason{
   font-size:10.5px;color:#C0392B;font-weight:500;
   margin-top:3px;letter-spacing:-0.3px;line-height:1.4;
@@ -1940,7 +1946,7 @@ function renderResult(){
             <td><span class="mm-badge">${r.s.maymac}</span></td>
             <td>${r.s.classCode||'-'}</td>
             <td class="font-mono">${r.s.sid}</td>
-            <td class="cell-name">${r.s.name}${r.s.submitted===false?' <span class="pill-mini-warn">📎 미제출</span>':''}${r.s.formData?'':' <span class="text-muted" style="font-size:11px">⚠ 양식없음</span>'}${r.status==='conflict'?`<div class="conflict-reason">⚠ ${conflictReason(r.s, r.a)}와 겹침</div>`:''}</td>
+            <td class="cell-name">${r.s.name}${r.s.submitted===false?' <span class="pill-mini-warn">📎 생기부 미제출</span>':''}${r.s.formData?'':' <span class="pill-mini-info">📋 설문 미응답</span>'}${r.status==='conflict'?`<div class="conflict-reason">⚠ ${conflictReason(r.s, r.a)}와 겹침</div>`:''}</td>
             <td style="text-align:center;white-space:nowrap;">
               <button class="btn-copy-sm" onclick="copyStudent(${r.idx})" title="셀 값 복사">📋</button>
               <button class="btn-copy-sm" onclick="printAnnouncement(${r.idx})" title="안내문 출력">📨</button>
@@ -1974,7 +1980,7 @@ function renderResult(){
             <td><span class="mm-badge">${r.s.maymac}</span></td>
             <td>${r.s.classCode||'-'}</td>
             <td class="font-mono">${r.s.sid}</td>
-            <td class="cell-name">${r.s.name}${r.s.submitted===false?' <span class="pill-mini-warn">📎 미제출</span>':''}</td>
+            <td class="cell-name">${r.s.name}${r.s.submitted===false?' <span class="pill-mini-warn">📎 생기부 미제출</span>':''}${r.s.formData?'':' <span class="pill-mini-info">📋 설문 미응답</span>'}</td>
             <td>${r.s.source==='survey'?'수시지원':'개별추가'}</td>
           </tr>`).join('')}</tbody>
         </table>
