@@ -2910,8 +2910,8 @@ function printAnnouncement(idx){
   const stu = targetList[idx];
   const asgn = assignments[idx];
   if(!stu || !asgn){alert('이 학생은 아직 배정되지 않았습니다.');return;}
-  if(typeof html2canvas === 'undefined' || typeof window.jspdf === 'undefined'){
-    alert('PDF 라이브러리(html2pdf.bundle.min.js)가 같은 폴더에 없습니다.\nindex.html과 같은 위치에 업로드되었는지 확인해주세요.');
+  if(typeof window.html2pdf === 'undefined'){
+    alert('PDF 라이브러리(html2pdf.bundle.min.js)가 로드되지 않았습니다.\n페이지를 새로고침하거나 관리자에게 문의해주세요.');
     return;
   }
   const filename = `안내문_${stu.name}_${asgn.date}.pdf`;
@@ -2981,33 +2981,25 @@ function printAnnouncement(idx){
         alert('PDF 생성 실패: 안내문 요소 없음');
         return;
       }
-      html2canvas(target, {
-        scale: 2, useCORS: true, letterRendering: true,
-        backgroundColor: '#ffffff', logging: false
-      }).then(canvas => {
-        const imgData = canvas.toDataURL('image/jpeg', 0.97);
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF('p', 'mm', 'a4');
-        pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
-        // blob + 강제 다운로드
-        const blob = pdf.output('blob');
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.style.display = 'none';
-        document.body.appendChild(a);
-        a.click();
-        setTimeout(() => {
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
+      window.html2pdf()
+        .from(target)
+        .set({
+          filename: filename,
+          margin: 0,
+          image: { type: 'jpeg', quality: 0.97 },
+          html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', logging: false },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          pagebreak: { mode: ['avoid-all'] }
+        })
+        .save()
+        .then(() => {
           document.body.removeChild(iframe);
           showToast(`✓ ${filename}`);
-        }, 500);
-      }).catch(err => {
-        document.body.removeChild(iframe);
-        alert('PDF 생성 실패: ' + err.message);
-      });
+        })
+        .catch(err => {
+          document.body.removeChild(iframe);
+          alert('PDF 생성 실패: ' + err.message);
+        });
     }, 1200);
   };
 }
