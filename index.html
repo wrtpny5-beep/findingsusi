@@ -732,6 +732,17 @@ const LAST_GRADE = CURRENT_GRADE - 1;
 // 로고는 같은 레포의 quetta_logo.png 파일을 절대 URL로 참조 (새 창에서도 정상 로드되도록)
 const QUETTA_LOGO = new URL('quetta_logo.png', location.href).href;
 
+// 설문에 실제 응답이 있는지 확인 (빈 formData는 미응답으로 취급)
+function hasSurveyResponse(fd){
+  if(!fd) return false;
+  // 단일값 하나라도 있으면 응답
+  if(fd.apply || fd.type || fd.needCons || fd.essayKind || fd.hs || fd.humSci || fd.curCollege) return true;
+  // past/plan 배열에 실제 값 있으면 응답
+  if(Array.isArray(fd.past) && fd.past.some(p => p && Object.values(p).some(v => v))) return true;
+  if(Array.isArray(fd.plan) && fd.plan.some(p => p && Object.values(p).some(v => v))) return true;
+  return false;
+}
+
 function extractFormData(row){
   const fd = {past:[], plan:[]};      // past[0..5] = 1차~6차, plan[0..5] = 1순위~6순위
   for(let i=0;i<6;i++){ fd.past.push({}); fd.plan.push({}); }
@@ -1946,7 +1957,7 @@ function renderResult(){
             <td><span class="mm-badge">${r.s.maymac}</span></td>
             <td>${r.s.classCode||'-'}</td>
             <td class="font-mono">${r.s.sid}</td>
-            <td class="cell-name">${r.s.name}${r.s.submitted===false?' <span class="pill-mini-warn">📎 생기부 미제출</span>':''}${r.s.formData?'':' <span class="pill-mini-info">📋 설문 미응답</span>'}${r.status==='conflict'?`<div class="conflict-reason">⚠ ${conflictReason(r.s, r.a)}와 겹침</div>`:''}</td>
+            <td class="cell-name">${r.s.name}${r.s.submitted===false?' <span class="pill-mini-warn">📎 생기부 미제출</span>':''}${hasSurveyResponse(r.s.formData)?'':' <span class="pill-mini-info">📋 설문 미응답</span>'}${r.status==='conflict'?`<div class="conflict-reason">⚠ ${conflictReason(r.s, r.a)}와 겹침</div>`:''}</td>
             <td style="text-align:center;white-space:nowrap;">
               <button class="btn-copy-sm" onclick="copyStudent(${r.idx})" title="셀 값 복사">📋</button>
               <button class="btn-copy-sm" onclick="printAnnouncement(${r.idx})" title="안내문 출력">📨</button>
@@ -1980,7 +1991,7 @@ function renderResult(){
             <td><span class="mm-badge">${r.s.maymac}</span></td>
             <td>${r.s.classCode||'-'}</td>
             <td class="font-mono">${r.s.sid}</td>
-            <td class="cell-name">${r.s.name}${r.s.submitted===false?' <span class="pill-mini-warn">📎 생기부 미제출</span>':''}${r.s.formData?'':' <span class="pill-mini-info">📋 설문 미응답</span>'}</td>
+            <td class="cell-name">${r.s.name}${r.s.submitted===false?' <span class="pill-mini-warn">📎 생기부 미제출</span>':''}${hasSurveyResponse(r.s.formData)?'':' <span class="pill-mini-info">📋 설문 미응답</span>'}</td>
             <td>${r.s.source==='survey'?'수시지원':'개별추가'}</td>
           </tr>`).join('')}</tbody>
         </table>
