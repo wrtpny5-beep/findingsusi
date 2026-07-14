@@ -3122,10 +3122,11 @@ function printAnnouncement(idx){
   const filename = `안내문_${stu.name}_${asgn.date}.pdf`;
   showToast('PDF 생성 중...');
 
-  // 임시 wrapper (off-screen, 렌더링은 됨)
+  // 임시 wrapper — 캡처하려면 실제로 화면에 렌더링되어야 함
+  // (off-screen이면 브라우저 최적화로 gradient/이미지가 실제로 그려지지 않아 백지가 됨)
   const wrapper = document.createElement('div');
   wrapper.id = 'ann-print-scope';
-  wrapper.style.cssText = 'position:fixed;left:-9999px;top:0;width:210mm;background:#fff;z-index:-1;';
+  wrapper.style.cssText = 'position:fixed;top:0;left:0;width:210mm;background:#fff;z-index:99999;';
 
   // 스타일 (페이지에 영향 주지 않도록 wrapper로 스코프)
   const styleEl = document.createElement('style');
