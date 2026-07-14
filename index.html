@@ -335,6 +335,45 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
 .ans-no-data{color:var(--muted);font-style:italic;font-size:12px;padding:4px 0;}
 .ans-summary{font-size:12px;color:var(--muted);margin-bottom:12px;}
 
+/* 답변 편집 모드 */
+.ans-editing{border:2px solid var(--teal-dark);background:#FDFCFF;}
+.edit-mode-badge{
+  margin-left:auto;padding:4px 10px;border-radius:14px;
+  background:var(--teal-dark);color:#fff;font-size:11px;font-weight:700;
+}
+.edit-btn{margin-left:6px;background:var(--teal-light);color:var(--teal-dark);border-color:var(--teal-mid);}
+.edit-btn:hover{background:var(--teal-mid);color:#fff;}
+.edit-inp{
+  flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:6px;
+  font-size:12.5px;font-family:inherit;color:var(--dark);background:#fff;
+  outline:none;transition:border-color .15s;
+}
+.edit-inp:focus{border-color:var(--teal-dark);box-shadow:0 0 0 2px rgba(139,133,232,.15);}
+.edit-table td{padding:2px !important;}
+.edit-cell{
+  width:100%;padding:4px 6px;border:1px solid transparent;border-radius:4px;
+  font-size:11px;font-family:inherit;color:var(--dark);background:transparent;
+  outline:none;
+}
+.edit-cell:focus{border-color:var(--teal-dark);background:#fff;box-shadow:0 0 0 2px rgba(139,133,232,.12);}
+.ans-memo-block{margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);}
+.ans-memo-hint{font-size:10.5px;color:var(--muted);font-weight:400;margin-left:4px;}
+.edit-memo{
+  width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;
+  font-size:12.5px;font-family:inherit;color:var(--dark);background:#fff;
+  outline:none;resize:vertical;line-height:1.5;margin-top:4px;
+}
+.edit-memo:focus{border-color:var(--teal-dark);box-shadow:0 0 0 2px rgba(139,133,232,.15);}
+.edit-actions{margin-top:14px;display:flex;gap:8px;justify-content:flex-end;}
+
+/* 조회 모드 메모 표시 */
+.ans-memo-view{
+  margin-top:10px;padding:10px 14px;border-radius:10px;
+  background:#F0F7F7;color:var(--dark);font-size:12.5px;line-height:1.6;
+  border-left:3px solid var(--teal-dark);
+}
+.ans-memo-view b{color:var(--teal-dark);margin-right:6px;}
+
 /* 토스트 */
 .toast{position:fixed;bottom:32px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 22px;border-radius:10px;z-index:1000;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px);}
@@ -841,6 +880,7 @@ let consultants=[];
 let assignments={};  // idx → {consultantId,consultantName,dateId,timeId,date,startTime,endTime}
 let lockedDates=[];  // ['2026-07-10', ...]  — 자동 배정 시 이 날짜는 슬롯/학생 그대로 유지
 let notifiedDates=[];  // ['2026-07-10', ...]  — 학부모/학생 안내 완료된 날짜
+let editingAnswer=null;  // 답변조회에서 수정 중인 학생 realIdx (없으면 null)
 
 // 운영 설정 (편집 가능, localStorage 영구화)
 const DEFAULT_ANNOUNCEMENT_BODY = `**1. 상담 전 준비할 것**
@@ -2057,6 +2097,71 @@ function toggleSubmitted(idx){
   renderAnswers();
 }
 
+// 답변조회 편집 시작
+function startAnswerEdit(idx){
+  editingAnswer = idx;
+  renderAnswers();
+  // 편집 카드로 스크롤
+  setTimeout(()=>{
+    const card = document.getElementById(`edit-card-${idx}`);
+    if(card) card.scrollIntoView({behavior:'smooth', block:'start'});
+  }, 50);
+}
+
+// 편집 취소
+function cancelAnswerEdit(){
+  editingAnswer = null;
+  renderAnswers();
+}
+
+// 편집 저장 — DOM에서 값 수집 후 formData 반영
+function saveAnswerEdit(idx){
+  const s = targetList[idx];
+  if(!s){editingAnswer=null;renderAnswers();return;}
+  const card = document.getElementById(`edit-card-${idx}`);
+  if(!card) return;
+  
+  if(!s.formData) s.formData = {};
+  const fd = s.formData;
+  
+  // 단답 4개
+  card.querySelectorAll('.edit-inp').forEach(inp=>{
+    fd[inp.dataset.field] = inp.value.trim();
+  });
+  
+  // past 테이블: 6행 x PAST_FIELDS
+  const newPast = [];
+  for(let i=0;i<6;i++){
+    const row = {};
+    card.querySelectorAll(`.edit-cell[data-past="${i}"]`).forEach(inp=>{
+      row[inp.dataset.field] = inp.value.trim();
+    });
+    // 완전히 빈 행은 빈 객체로 유지 (구조 유지용)
+    newPast.push(row);
+  }
+  fd.past = newPast;
+  
+  // plan 테이블: 6행 x PLAN_FIELDS
+  const newPlan = [];
+  for(let i=0;i<6;i++){
+    const row = {};
+    card.querySelectorAll(`.edit-cell[data-plan="${i}"]`).forEach(inp=>{
+      row[inp.dataset.field] = inp.value.trim();
+    });
+    newPlan.push(row);
+  }
+  fd.plan = newPlan;
+  
+  // 메모
+  const memoEl = card.querySelector('.edit-memo');
+  if(memoEl) fd.memo = memoEl.value.trim();
+  
+  save();
+  editingAnswer = null;
+  renderAnswers();
+  showToast(`✓ ${s.name} 답변 수정 완료`);
+}
+
 function getApplyTypeFlags(typeStr){
   const t = String(typeStr || '').trim();
   return {
@@ -2138,6 +2243,57 @@ function renderAnswers(){
     // 학생의 실제 인덱스 (targetList에서 위치)
     const realIdx = targetList.indexOf(s);
     const isSubmitted = s.submitted === true;
+    const isEditing = editingAnswer === realIdx;
+    
+    if(isEditing){
+      // === 편집 모드 ===
+      const pastArr = fd.past || [];
+      const planArr = fd.plan || [];
+      // 최소 표시 행 개수 확보
+      while(pastArr.length < 6) pastArr.push({});
+      while(planArr.length < 6) planArr.push({});
+      
+      html += `<div class="ans-card ans-editing" id="edit-card-${realIdx}">
+        <div class="ans-header">
+          <span class="ans-sid">${_esc(s.sid)}</span>
+          <span class="ans-name">${_esc(s.name)}</span>
+          <span class="ans-class">${_esc(s.classCode||'-')}</span>
+          <span class="ans-mm">마이맥 ${_esc(s.maymac)}</span>
+          <span class="edit-mode-badge">✏️ 수정 중</span>
+        </div>
+        <div class="ans-single-grid">
+          <div class="ans-single-row"><span class="ans-single-q">수시지원여부</span><input class="edit-inp" data-field="apply" value="${_esc(fd.apply||'')}"></div>
+          <div class="ans-single-row"><span class="ans-single-q">수시지원유형</span><input class="edit-inp" data-field="type" value="${_esc(fd.type||'')}"></div>
+          <div class="ans-single-row"><span class="ans-single-q">컨설팅필요</span><input class="edit-inp" data-field="needCons" value="${_esc(fd.needCons||'')}"></div>
+          <div class="ans-single-row"><span class="ans-single-q">논술종류</span><input class="edit-inp" data-field="essayKind" value="${_esc(fd.essayKind||'')}"></div>
+        </div>
+        <div class="ans-table-block"><div class="ans-table-title">📋 ${py}학년도 작년 결과</div>
+          <table class="ans-mini-table edit-table"><thead><tr><th>차수</th>${PAST_FIELDS.map(f=>`<th>${f}</th>`).join('')}</tr></thead><tbody>`;
+      for(let i=0; i<6; i++){
+        const p = pastArr[i] || {};
+        html += `<tr><td><b>${i+1}차</b></td>${PAST_FIELDS.map(f=>`<td><input class="edit-cell" data-past="${i}" data-field="${f}" value="${_esc(p[f]||'')}"></td>`).join('')}</tr>`;
+      }
+      html += `</tbody></table></div>
+        <div class="ans-table-block"><div class="ans-table-title">🎯 ${ply}학년도 올해 희망</div>
+          <table class="ans-mini-table edit-table"><thead><tr><th>순위</th>${PLAN_FIELDS.map(f=>`<th>${f}</th>`).join('')}</tr></thead><tbody>`;
+      for(let i=0; i<6; i++){
+        const p = planArr[i] || {};
+        html += `<tr><td><b>${i+1}순위</b></td>${PLAN_FIELDS.map(f=>`<td><input class="edit-cell" data-plan="${i}" data-field="${f}" value="${_esc(p[f]||'')}"></td>`).join('')}</tr>`;
+      }
+      html += `</tbody></table></div>
+        <div class="ans-memo-block">
+          <div class="ans-table-title">📝 추가 메모 <span class="ans-memo-hint">(조사서 하단에 표시됩니다)</span></div>
+          <textarea class="edit-memo" data-field="memo" rows="3" placeholder="상담 시 참고할 특이사항, 추가 질문 등을 자유롭게 적으세요">${_esc(fd.memo||'')}</textarea>
+        </div>
+        <div class="edit-actions">
+          <button class="btn-print" onclick="saveAnswerEdit(${realIdx})">💾 저장</button>
+          <button class="btn-copy-sm" onclick="cancelAnswerEdit()">취소</button>
+        </div>
+      </div>`;
+      continue;
+    }
+    
+    // === 조회 모드 (기본) ===
     html += `<div class="ans-card">
       <div class="ans-header">
         <span class="ans-sid">${_esc(s.sid)}</span>
@@ -2148,6 +2304,7 @@ function renderAnswers(){
           <input type="checkbox" ${isSubmitted?'checked':''} onchange="toggleSubmitted(${realIdx})">
           <span>📎 생기부 제출</span>
         </label>
+        <button class="btn-copy-sm edit-btn" onclick="startAnswerEdit(${realIdx})" title="이 학생 답변 수정">✏️ 수정</button>
       </div>
       <div class="ans-single-grid">
         <div class="ans-single-row"><span class="ans-single-q">수시지원여부</span><span class="ans-single-v">${_esc(fd.apply||'-')}</span></div>
@@ -2181,6 +2338,10 @@ function renderAnswers(){
       html += `</tbody></table>`;
     } else {
       html += `<div class="ans-no-data">작성 내용 없음</div>`;
+    }
+    // 메모 있으면 하단에 표시
+    if(fd.memo && String(fd.memo).trim()){
+      html += `<div class="ans-memo-view">📝 <b>추가 메모</b> · ${_esc(fd.memo)}</div>`;
     }
     html += `</div></div>`;
   }
@@ -2583,6 +2744,7 @@ function buildFormHTML(stu, idx){
     </table>
 
     <p class="notice mt2">※ ${planY}학년도(올해) 지원 희망 [대학/학과/전형명]은 대략 희망하는 사항으로 적으면 됩니다.</p>
+    ${fd.memo && String(fd.memo).trim() ? `<div class="form-memo"><div class="form-memo-label">📝 추가 메모</div><div class="form-memo-body">${_esc(fd.memo).replace(/\n/g,'<br>')}</div></div>` : ''}
     <div class="footer-name">학번 ${_esc(stu.sid)} · 이름 ${_esc(stu.name)} · ${stu.maymac}반</div>
   </section>`;
 }
@@ -2632,6 +2794,9 @@ function _renderFormsInNewWindow(stuList, {autoprint=true, title='수시 상담 
   .merged-tbl .group-title{background:#D4F0DC;color:#222;font-size:10pt;font-weight:700;text-align:center;padding:8px 4px;line-height:1.3;letter-spacing:-0.3px;}
   .merged-tbl .group-head th:not(.group-title){background:#D4F0DC;font-weight:600;color:#222;}
   .footer-name{margin-top:10px;text-align:right;font-size:10pt;color:#444;font-family:'DM Mono',monospace;}
+  .form-memo{margin-top:12px;padding:10px 14px;border-radius:8px;background:#FFFBEA;border:1px solid #F5D97A;border-left:4px solid #E5B94A;page-break-inside:avoid;}
+  .form-memo-label{font-size:9.5pt;font-weight:700;color:#8B6A1D;margin-bottom:4px;letter-spacing:-0.3px;}
+  .form-memo-body{font-size:10pt;color:#222;line-height:1.55;white-space:pre-wrap;word-break:break-word;}
   @page{size:A4 landscape;margin:0;}
   @media print{
     body{background:#fff;padding:0;}
