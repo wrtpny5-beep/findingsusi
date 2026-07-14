@@ -1999,6 +1999,7 @@ function renderResult(){
             <td class="cell-name">${r.s.name}${r.s.submitted===false?' <span class="pill-mini-warn">📎 생기부 미제출</span>':''}${hasSurveyResponse(r.s.formData)?'':' <span class="pill-mini-info">📋 설문 미응답</span>'}${r.status==='conflict'?`<div class="conflict-reason">⚠ ${conflictReason(r.s, r.a)}와 겹침</div>`:''}</td>
             <td style="text-align:center;white-space:nowrap;">
               <button class="btn-copy-sm" onclick="copyStudent(${r.idx})" title="셀 값 복사">📋</button>
+              <button class="btn-copy-sm" onclick="printAnnouncement(${r.idx})" title="개인 안내문 PDF 다운로드">📨</button>
               <button class="btn-print" onclick="printForms([${r.idx}])">📄 양식</button>
               <button class="btn-copy-sm" onclick="reassignSingleStudent(${r.idx})" title="이 학생 빼고 빈자리 메우기" style="border-color:#C0392B;color:#C0392B;">🔄</button>
             </td>
@@ -2817,7 +2818,7 @@ function buildAnnouncementHTML(stu, asgn){
         <span class="ann-status-label">수시 희망 설문</span>
         ${hasSurvey
           ? '<span class="ann-status-badge ann-status-ok">✓ 응답 완료</span>'
-          : '<span class="ann-status-badge ann-status-no">✗ 미응답</span><span class="ann-status-note">→ 상담 전 행정실에 방문해 응답해 주세요</span>'}
+          : '<span class="ann-status-badge ann-status-no">✗ 미응답</span><span class="ann-status-note">→ 메시지 확인 후 행정실 방문해서 설문지 받아가세요</span>'}
       </div>
     </div>
 
@@ -2944,7 +2945,7 @@ function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, title='수�
 }
 
 // 안내문 HTML 문서 빌드 (새 창/iframe 공용)
-// 학생 1명 안내문 — PDF 자동 다운로드 (iframe 방식, 새 창 안 열림)
+// 학생 1명 안내문 — PDF 자동 다운로드 (부모 body 임시 wrapper 방식)
 function printAnnouncement(idx){
   const stu = targetList[idx];
   const asgn = assignments[idx];
@@ -2956,91 +2957,92 @@ function printAnnouncement(idx){
   const filename = `안내문_${stu.name}_${asgn.date}.pdf`;
   showToast('PDF 생성 중...');
 
-  // 숨겨진 iframe 생성 (화면 밖)
-  const iframe = document.createElement('iframe');
-  iframe.style.cssText = 'position:fixed;left:-9999px;top:0;width:210mm;height:297mm;border:0;background:#fff;';
-  document.body.appendChild(iframe);
+  // 임시 wrapper (off-screen, 렌더링은 됨)
+  const wrapper = document.createElement('div');
+  wrapper.id = 'ann-print-scope';
+  wrapper.style.cssText = 'position:fixed;left:-9999px;top:0;width:210mm;background:#fff;z-index:-1;';
 
-  // 안내문 HTML 작성 (단일 페이지, A4 정확 크기)
+  // 스타일 (페이지에 영향 주지 않도록 wrapper로 스코프)
+  const styleEl = document.createElement('style');
+  styleEl.textContent = `
+#ann-print-scope *{box-sizing:border-box;margin:0;padding:0;}
+#ann-print-scope{font-family:'Noto Sans KR',sans-serif;color:#231F20;font-size:11pt;line-height:1.65;background:#fff;}
+#ann-print-scope .ann-page{
+  background:#fff;width:210mm;height:297mm;padding:22mm 20mm 24mm;margin:0;
+  position:relative;overflow:hidden;
+  background-image:
+    radial-gradient(circle at 12% 8%, rgba(0,178,190,.15) 0, transparent 14%),
+    radial-gradient(circle at 92% 12%, rgba(126,140,198,.2) 0, transparent 16%),
+    radial-gradient(circle at 5% 92%, rgba(0,178,190,.12) 0, transparent 16%);
+}
+#ann-print-scope .ann-title-wrap{text-align:center;margin-bottom:18px;}
+#ann-print-scope .ann-title{font-family:'Noto Sans KR',sans-serif;font-size:22pt;font-weight:700;color:#231F20;letter-spacing:-1px;line-height:1.2;}
+#ann-print-scope .ann-info-card{background:linear-gradient(135deg, #E0F5F6 0%, #E5E9F5 100%);border-radius:14px;padding:13px 22px;margin-bottom:20px;}
+#ann-print-scope .ann-info-row{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;font-size:10.5pt;}
+#ann-print-scope .ann-info-label{color:#5D6B99;font-weight:500;}
+#ann-print-scope .ann-info-val{font-family:'Noto Sans KR',sans-serif;color:#231F20;font-weight:700;font-size:11pt;letter-spacing:-0.3px;}
+#ann-print-scope .ann-info-name{font-family:'Noto Sans KR',sans-serif;font-size:12pt;font-weight:900;letter-spacing:-0.3px;}
+#ann-print-scope .ann-info-divider{color:#B8BDD5;font-weight:300;margin:0 4px;}
+#ann-print-scope .ann-main{background:linear-gradient(135deg, #C7ECEE 0%, #D5DAED 100%);border-radius:14px;padding:20px 24px;margin-bottom:24px;position:relative;}
+#ann-print-scope .ann-main-label{display:inline-block;background:#00B2BE;color:#fff;font-size:10pt;font-weight:700;padding:3px 12px;border-radius:12px;margin-bottom:14px;letter-spacing:0.5px;}
+#ann-print-scope .ann-datetime{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:12px;border-bottom:1.5px dashed #C9D0E5;}
+#ann-print-scope .ann-datetime-text{font-family:'Noto Sans KR',sans-serif;font-weight:700;font-size:18pt;color:#231F20;letter-spacing:-1.2px;line-height:1.2;}
+#ann-print-scope .ann-duration{font-size:10.5pt;color:#6B7280;font-weight:500;}
+#ann-print-scope .ann-place-line{font-size:11.5pt;color:#231F20;line-height:1.7;}
+#ann-print-scope .ann-place-line b{color:#7E8CC6;font-weight:700;}
+#ann-print-scope .ann-body{padding:4px 4px 0;}
+#ann-print-scope .ann-p{font-size:11pt;color:#231F20;line-height:1.75;margin-bottom:12px;}
+#ann-print-scope .ann-p:last-child{margin-bottom:0;}
+#ann-print-scope .ann-p b{color:#7E8CC6;font-weight:700;}
+#ann-print-scope .ann-status-card{background:#F0F7F7;border-radius:12px;padding:14px 18px;margin-bottom:20px;border:1px solid rgba(0,178,190,.1);}
+#ann-print-scope .ann-status-title{font-size:10pt;font-weight:700;color:#7E8CC6;margin-bottom:8px;letter-spacing:-0.3px;}
+#ann-print-scope .ann-status-row{display:flex;align-items:center;gap:10px;font-size:10.5pt;line-height:1.7;flex-wrap:wrap;}
+#ann-print-scope .ann-status-label{color:#231F20;font-weight:500;min-width:78px;}
+#ann-print-scope .ann-status-badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:9.5pt;font-weight:700;letter-spacing:-0.3px;}
+#ann-print-scope .ann-status-ok{background:#D5F1F3;color:#007A83;}
+#ann-print-scope .ann-status-no{background:#F9DEDE;color:#C64545;}
+#ann-print-scope .ann-status-note{font-size:9.5pt;color:#8A4A4A;font-weight:500;}
+#ann-print-scope .ann-brand{position:absolute;bottom:14mm;right:20mm;}
+#ann-print-scope .ann-brand img{height:10mm;width:auto;display:block;opacity:.85;}
+`;
+  wrapper.appendChild(styleEl);
+
+  // 안내문 HTML 삽입
   const annHTML = buildAnnouncementHTML(stu, asgn);
-  const docHTML = `<!DOCTYPE html>
-<html lang="ko"><head><meta charset="UTF-8">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
-<style>
-  *{box-sizing:border-box;margin:0;padding:0;}
-  body{font-family:'Noto Sans KR',sans-serif;color:#231F20;font-size:11pt;line-height:1.65;background:#fff;padding:0;margin:0;}
-  .ann-page{
-    background:#fff;width:210mm;height:297mm;padding:22mm 20mm 24mm;margin:0;
-    position:relative;overflow:hidden;
-    background-image:
-      radial-gradient(circle at 12% 8%, rgba(0,178,190,.15) 0, transparent 14%),
-      radial-gradient(circle at 92% 12%, rgba(126,140,198,.2) 0, transparent 16%),
-      radial-gradient(circle at 5% 92%, rgba(0,178,190,.12) 0, transparent 16%);
-  }
-  .ann-title-wrap{text-align:center;margin-bottom:18px;}
-  .ann-title{font-family:'Noto Sans KR',sans-serif;font-size:22pt;font-weight:700;color:#231F20;letter-spacing:-1px;line-height:1.2;}
-  .ann-info-card{background:linear-gradient(135deg, #E0F5F6 0%, #E5E9F5 100%);border-radius:14px;padding:13px 22px;margin-bottom:20px;}
-  .ann-info-row{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;font-size:10.5pt;}
-  .ann-info-label{color:#5D6B99;font-weight:500;}
-  .ann-info-val{font-family:'Noto Sans KR',sans-serif;color:#231F20;font-weight:700;font-size:11pt;letter-spacing:-0.3px;}
-  .ann-info-name{font-family:'Noto Sans KR',sans-serif;font-size:12pt;font-weight:900;letter-spacing:-0.3px;}
-  .ann-info-divider{color:#B8BDD5;font-weight:300;margin:0 4px;}
-  .ann-main{background:linear-gradient(135deg, #C7ECEE 0%, #D5DAED 100%);border-radius:14px;padding:20px 24px;margin-bottom:24px;position:relative;}
-  .ann-main-label{display:inline-block;background:#00B2BE;color:#fff;font-size:10pt;font-weight:700;padding:3px 12px;border-radius:12px;margin-bottom:14px;letter-spacing:0.5px;}
-  .ann-datetime{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:12px;border-bottom:1.5px dashed #C9D0E5;}
-  .ann-datetime-text{font-family:'Noto Sans KR',sans-serif;font-weight:700;font-size:18pt;color:#231F20;letter-spacing:-1.2px;line-height:1.2;}
-  .ann-duration{font-size:10.5pt;color:#6B7280;font-weight:500;}
-  .ann-place-line{font-size:11.5pt;color:#231F20;line-height:1.7;}
-  .ann-place-line b{color:#7E8CC6;font-weight:700;}
-  .ann-body{padding:4px 4px 0;}
-  .ann-p{font-size:11pt;color:#231F20;line-height:1.75;margin-bottom:12px;}
-  .ann-p:last-child{margin-bottom:0;}
-  .ann-p b{color:#7E8CC6;font-weight:700;}
-  .ann-status-card{background:#F0F7F7;border-radius:12px;padding:14px 18px;margin-bottom:20px;border:1px solid rgba(0,178,190,.1);}
-  .ann-status-title{font-size:10pt;font-weight:700;color:#7E8CC6;margin-bottom:8px;letter-spacing:-0.3px;}
-  .ann-status-row{display:flex;align-items:center;gap:10px;font-size:10.5pt;line-height:1.7;flex-wrap:wrap;}
-  .ann-status-label{color:#231F20;font-weight:500;min-width:78px;}
-  .ann-status-badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:9.5pt;font-weight:700;letter-spacing:-0.3px;}
-  .ann-status-ok{background:#D5F1F3;color:#007A83;}
-  .ann-status-no{background:#F9DEDE;color:#C64545;}
-  .ann-status-note{font-size:9.5pt;color:#8A4A4A;font-weight:500;}
-  .ann-brand{position:absolute;bottom:14mm;right:20mm;}
-  .ann-brand img{height:10mm;width:auto;display:block;opacity:.85;}
-</style></head><body>${annHTML}</body></html>`;
-  iframe.srcdoc = docHTML;
+  const contentDiv = document.createElement('div');
+  contentDiv.innerHTML = annHTML;
+  wrapper.appendChild(contentDiv);
 
-  iframe.onload = () => {
-    setTimeout(() => {
-      const idoc = iframe.contentDocument;
-      const target = idoc.querySelector('.ann-page');
-      if(!target){
-        document.body.removeChild(iframe);
-        alert('PDF 생성 실패: 안내문 요소 없음');
-        return;
-      }
-      window.html2pdf()
-        .from(target)
-        .set({
-          filename: filename,
-          margin: 0,
-          image: { type: 'jpeg', quality: 0.97 },
-          html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', logging: false },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-          pagebreak: { mode: ['avoid-all'] }
-        })
-        .save()
-        .then(() => {
-          document.body.removeChild(iframe);
-          showToast(`✓ ${filename}`);
-        })
-        .catch(err => {
-          document.body.removeChild(iframe);
-          alert('PDF 생성 실패: ' + err.message);
-        });
-    }, 1200);
-  };
+  document.body.appendChild(wrapper);
+
+  // 폰트/이미지 로드 대기
+  setTimeout(() => {
+    const target = wrapper.querySelector('.ann-page');
+    if(!target){
+      document.body.removeChild(wrapper);
+      alert('PDF 생성 실패: 안내문 요소 없음');
+      return;
+    }
+    window.html2pdf()
+      .from(target)
+      .set({
+        filename: filename,
+        margin: 0,
+        image: { type: 'jpeg', quality: 0.97 },
+        html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all'] }
+      })
+      .save()
+      .then(() => {
+        document.body.removeChild(wrapper);
+        showToast(`✓ ${filename}`);
+      })
+      .catch(err => {
+        document.body.removeChild(wrapper);
+        alert('PDF 생성 실패: ' + err.message);
+      });
+  }, 600);
 }
 
 
