@@ -168,6 +168,24 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
 .lock-star.active:hover{
   background:#FFE7A3;
 }
+.notify-bell{
+  background:transparent;border:1.5px solid var(--border);
+  width:38px;height:38px;border-radius:50%;
+  font-size:16px;line-height:1;cursor:pointer;
+  color:#bbb;
+  transition:all 0.18s ease;
+  margin-left:8px;
+}
+.notify-bell:hover{
+  background:var(--teal-light);border-color:var(--teal-dark);color:var(--teal-dark);transform:scale(1.08);
+}
+.notify-bell.active{
+  background:var(--teal-light);border-color:var(--teal-dark);color:var(--teal-dark);
+  box-shadow:0 0 0 3px rgba(139,133,232,0.25);
+}
+.notify-bell.active:hover{
+  background:var(--teal-mid);
+}
 .pill-mini-warn{
   display:inline-block;font-size:10px;font-weight:600;
   background:#FFE5E5;color:#C0392B;
@@ -822,6 +840,7 @@ let targetList=[];  // 배정 대상 학생 [{sid,name,classCode,maymac,busyBloc
 let consultants=[];
 let assignments={};  // idx → {consultantId,consultantName,dateId,timeId,date,startTime,endTime}
 let lockedDates=[];  // ['2026-07-10', ...]  — 자동 배정 시 이 날짜는 슬롯/학생 그대로 유지
+let notifiedDates=[];  // ['2026-07-10', ...]  — 학부모/학생 안내 완료된 날짜
 
 // 운영 설정 (편집 가능, localStorage 영구화)
 const DEFAULT_ANNOUNCEMENT_BODY = `**1. 상담 전 준비할 것**
@@ -869,6 +888,7 @@ function save(){
     localStorage.setItem('qs_master',JSON.stringify(masterMap));
     localStorage.setItem('qs_settings',JSON.stringify(settings));
     localStorage.setItem('qs_locked',JSON.stringify(lockedDates));
+    localStorage.setItem('qs_notified',JSON.stringify(notifiedDates));
   }catch(e){
     if(e && e.name && e.name.includes('Quota')){
       // 마스터가 너무 커서 한도 초과 → 마스터는 휘발성으로 fallback, 나머지는 보존
@@ -879,6 +899,7 @@ function save(){
         localStorage.setItem('qs_target',JSON.stringify(targetList));
         localStorage.setItem('qs_settings',JSON.stringify(settings));
         localStorage.setItem('qs_locked',JSON.stringify(lockedDates));
+        localStorage.setItem('qs_notified',JSON.stringify(notifiedDates));
       }catch{}
       console.warn('[저장 알림] 마스터 데이터 용량 초과로 마스터만 휘발성 처리. 새로고침 시 마스터 재업로드 필요.');
     }else{
@@ -894,6 +915,7 @@ function load(){
   try{targetList=JSON.parse(localStorage.getItem('qs_target'))||[];}catch{targetList=[];}
   try{masterMap=JSON.parse(localStorage.getItem('qs_master'))||{};}catch{masterMap={};}
   try{lockedDates=JSON.parse(localStorage.getItem('qs_locked'))||[];}catch{lockedDates=[];}
+  try{notifiedDates=JSON.parse(localStorage.getItem('qs_notified'))||[];}catch{notifiedDates=[];}
   try{
     const saved = JSON.parse(localStorage.getItem('qs_settings'))||{};
     settings = {...DEFAULT_SETTINGS, ...saved};  // 새 키 추가 시 기본값 병합
@@ -1277,7 +1299,7 @@ function exportBackup(){
     appName: 'QUETTA 수시상담배정',
     version: 1,
     exportedAt: new Date().toISOString(),
-    data: { consultants, assignments, targetList, masterMap, lockedDates }
+    data: { consultants, assignments, targetList, masterMap, lockedDates, notifiedDates }
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json;charset=utf-8'});
   const url = URL.createObjectURL(blob);
@@ -1313,6 +1335,7 @@ function importBackup(file){
       targetList = Array.isArray(d.targetList) ? d.targetList : [];
       masterMap = (d.masterMap && typeof d.masterMap === 'object') ? d.masterMap : {};
       lockedDates = Array.isArray(d.lockedDates) ? d.lockedDates : [];
+      notifiedDates = Array.isArray(d.notifiedDates) ? d.notifiedDates : [];
 
       save();
       renderStudentTable();
@@ -1354,6 +1377,7 @@ function resetAll(){
   consultants = [];
   assignments = {};
   lockedDates = [];
+  notifiedDates = [];
 
   // 업로드 영역 done 클래스 제거
   document.getElementById('zone-master')?.classList.remove('done');
@@ -1667,6 +1691,20 @@ function toggleDateLock(date){
   renderResult();
 }
 
+// 학부모/학생 안내 완료 토글: 종 클릭 시 안내 완료 상태 전환
+function toggleDateNotify(date){
+  const i = notifiedDates.indexOf(date);
+  if(i >= 0){
+    notifiedDates.splice(i, 1);
+    showToast(`${formatKoreanDate(date)} 안내 대기로 변경`);
+  } else {
+    notifiedDates.push(date);
+    showToast(`${formatKoreanDate(date)} 안내 완료로 표시`);
+  }
+  save();
+  renderResult();
+}
+
 // 단일 학생 배정 취소 + 빈자리 메우기
 // - 1순위: 기존 미배정 학생 풀
 // - 2순위: 빈 슬롯 날짜 이후 다른 슬롯에 배정된 학생 (이후 일정에서 끌어옴)
@@ -1925,6 +1963,7 @@ function renderResult(){
     const conflictN = groupRows.filter(r=>r.status==='conflict').length;
     const unknownN = groupRows.filter(r=>r.status==='unknown').length;
     const isLocked = lockedDates.includes(date);
+    const isNotified = notifiedDates.includes(date);
     html+=`
       <div class="date-group${isLocked?' date-locked':''}">
         <div class="date-group-header">
@@ -1960,7 +1999,6 @@ function renderResult(){
             <td class="cell-name">${r.s.name}${r.s.submitted===false?' <span class="pill-mini-warn">📎 생기부 미제출</span>':''}${hasSurveyResponse(r.s.formData)?'':' <span class="pill-mini-info">📋 설문 미응답</span>'}${r.status==='conflict'?`<div class="conflict-reason">⚠ ${conflictReason(r.s, r.a)}와 겹침</div>`:''}</td>
             <td style="text-align:center;white-space:nowrap;">
               <button class="btn-copy-sm" onclick="copyStudent(${r.idx})" title="셀 값 복사">📋</button>
-              <button class="btn-copy-sm" onclick="printAnnouncement(${r.idx})" title="안내문 출력">📨</button>
               <button class="btn-print" onclick="printForms([${r.idx}])">📄 양식</button>
               <button class="btn-copy-sm" onclick="reassignSingleStudent(${r.idx})" title="이 학생 빼고 빈자리 메우기" style="border-color:#C0392B;color:#C0392B;">🔄</button>
             </td>
@@ -1968,6 +2006,7 @@ function renderResult(){
         </table>
         <div class="date-lock-bar">
           <button class="lock-star${isLocked?' active':''}" onclick="toggleDateLock('${date}')" title="${isLocked?'고정 해제':'이 날짜 고정 (자동 배정 시 보호됨)'}">${isLocked?'⭐':'☆'}</button>
+          <button class="notify-bell${isNotified?' active':''}" onclick="toggleDateNotify('${date}')" title="${isNotified?'안내 완료 해제':'학부모/학생 안내 완료로 표시'}">${isNotified?'🔔':'🔕'}</button>
         </div>
       </div>`;
   });
