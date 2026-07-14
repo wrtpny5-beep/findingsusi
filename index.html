@@ -3019,16 +3019,18 @@ function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, autoDownload
         setTimeout(()=>{
           const target = document.querySelector('.ann-page');
           if(!target){ alert('안내문 요소를 찾을 수 없습니다.'); return; }
-          if(!window.html2canvas){ alert('PDF 라이브러리 로드 실패 (html2canvas). 창을 닫고 다시 시도해주세요.'); return; }
-          const jsPDFCtor = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
-          if(!jsPDFCtor){ alert('PDF 라이브러리 로드 실패 (jsPDF). 창을 닫고 다시 시도해주세요.'); return; }
-          // html2canvas → jsPDF.addImage(0,0,210,297) 로 A4 한 페이지에 강제 fit
-          window.html2canvas(target, {
-            scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', logging: false
-          }).then(function(canvas){
-            const imgData = canvas.toDataURL('image/jpeg', 0.97);
-            const pdf = new jsPDFCtor('p','mm','a4');
-            pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297, undefined, 'FAST');
+          if(!window.html2pdf){ alert('PDF 라이브러리 로드 실패. 창을 닫고 다시 시도해주세요.'); return; }
+          // html2pdf로 PDF 생성 → get('pdf')로 인스턴스 확보 → 여분 페이지 삭제 → save
+          window.html2pdf().set({
+            margin: 0,
+            image: { type: 'jpeg', quality: 0.97 },
+            html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', logging: false },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            pagebreak: { mode: ['avoid-all'] }
+          }).from(target).toPdf().get('pdf').then(function(pdf){
+            // 뒤에 붙는 빈 페이지 제거 (첫 페이지만 남김)
+            const pageCount = pdf.internal.getNumberOfPages();
+            for(let i = pageCount; i > 1; i--) pdf.deletePage(i);
             pdf.save(${JSON.stringify(downloadFilename || (title + '.pdf'))});
             setTimeout(()=>window.close(), 400);
           }).catch(function(err){ alert('PDF 생성 실패: ' + (err && err.message ? err.message : err)); });
