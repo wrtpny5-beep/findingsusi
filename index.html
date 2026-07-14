@@ -3007,14 +3007,42 @@ function renderBody(text){
 }
 
 // 안내문 인쇄 (학생 idx 배열)
-function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, title='수시 상담 안내문'}={}){
+function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, autoDownload=false, downloadFilename='', title='수시 상담 안내문'}={}){
   const w = window.open('', '_blank', 'width=900,height=1200');
   if(!w){alert('팝업이 차단되었습니다. 팝업 허용 후 다시 시도해주세요.');return;}
   const all = stuAsgnList.map(({stu,asgn}) => buildAnnouncementHTML(stu, asgn)).join('');
 
-  const actionScript = autoprint
-    ? `window.addEventListener('load',()=>{setTimeout(()=>window.print(),500);});`
-    : `/* preview mode */`;
+  let actionScript;
+  if(autoDownload){
+    actionScript = `
+      window.addEventListener('load',()=>{
+        setTimeout(()=>{
+          const target = document.querySelector('.ann-page');
+          if(!target){ alert('안내문 요소를 찾을 수 없습니다.'); return; }
+          if(!window.html2pdf){ alert('PDF 라이브러리 로드 실패. 창을 닫고 다시 시도해주세요.'); return; }
+          window.html2pdf()
+            .from(target)
+            .set({
+              filename: ${JSON.stringify(downloadFilename || (title + '.pdf'))},
+              margin: 0,
+              image: { type: 'jpeg', quality: 0.97 },
+              html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', logging: false },
+              jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+              pagebreak: { mode: ['avoid-all'] }
+            })
+            .save()
+            .then(()=>{ setTimeout(()=>window.close(), 400); })
+            .catch(err=>{ alert('PDF 생성 실패: ' + err.message); });
+        }, 800);
+      });
+    `;
+  } else if(autoprint){
+    actionScript = `window.addEventListener('load',()=>{setTimeout(()=>window.print(),500);});`;
+  } else {
+    actionScript = `/* preview mode */`;
+  }
+
+  const libScript = autoDownload ? '<script src="/findingsusi/html2pdf.bundle.min.js"></' + 'script>' : '';
 
   w.document.write(`<!DOCTYPE html>
 <html lang="ko"><head><meta charset="UTF-8">
@@ -3022,6 +3050,7 @@ function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, title='수�
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Bagel+Fat+One&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+${libScript}
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
   body{font-family:'Noto Sans KR',sans-serif;color:#231F20;font-size:11pt;line-height:1.65;background:#e5e5e5;padding:20px;}
@@ -3110,105 +3139,20 @@ function _renderAnnouncementsInWindow(stuAsgnList, {autoprint=true, title='수�
 }
 
 // 안내문 HTML 문서 빌드 (새 창/iframe 공용)
-// 학생 1명 안내문 — PDF 자동 다운로드 (부모 body 임시 wrapper 방식)
+// 학생 1명 안내문 — 새 창을 열어 자체적으로 렌더링·캡처·다운로드·자동닫기
+// (부모 창의 임시 wrapper는 CSS/이미지 이슈로 백지가 나와서 새 창 방식이 안전함)
 function printAnnouncement(idx){
   const stu = targetList[idx];
   const asgn = assignments[idx];
   if(!stu || !asgn){alert('이 학생은 아직 배정되지 않았습니다.');return;}
-  if(typeof window.html2pdf === 'undefined'){
-    alert('PDF 라이브러리(html2pdf.bundle.min.js)가 로드되지 않았습니다.\n페이지를 새로고침하거나 관리자에게 문의해주세요.');
-    return;
-  }
   const filename = `안내문_${stu.name}_${asgn.date}.pdf`;
   showToast('PDF 생성 중...');
-
-  // 임시 wrapper — 캡처하려면 실제로 화면에 렌더링되어야 함
-  // (off-screen이면 브라우저 최적화로 gradient/이미지가 실제로 그려지지 않아 백지가 됨)
-  const wrapper = document.createElement('div');
-  wrapper.id = 'ann-print-scope';
-  wrapper.style.cssText = 'position:fixed;top:0;left:0;width:210mm;background:#fff;z-index:99999;';
-
-  // 스타일 (페이지에 영향 주지 않도록 wrapper로 스코프)
-  const styleEl = document.createElement('style');
-  styleEl.textContent = `
-#ann-print-scope *{box-sizing:border-box;margin:0;padding:0;}
-#ann-print-scope{font-family:'Noto Sans KR',sans-serif;color:#231F20;font-size:11pt;line-height:1.65;background:#fff;}
-#ann-print-scope .ann-page{
-  background:#fff;width:210mm;height:297mm;padding:22mm 20mm 24mm;margin:0;
-  position:relative;overflow:hidden;
-  background-image:
-    radial-gradient(circle at 12% 8%, rgba(0,178,190,.15) 0, transparent 14%),
-    radial-gradient(circle at 92% 12%, rgba(126,140,198,.2) 0, transparent 16%),
-    radial-gradient(circle at 5% 92%, rgba(0,178,190,.12) 0, transparent 16%);
-}
-#ann-print-scope .ann-title-wrap{text-align:center;margin-bottom:18px;}
-#ann-print-scope .ann-title{font-family:'Noto Sans KR',sans-serif;font-size:22pt;font-weight:700;color:#231F20;letter-spacing:-1px;line-height:1.2;}
-#ann-print-scope .ann-info-card{background:linear-gradient(135deg, #E0F5F6 0%, #E5E9F5 100%);border-radius:14px;padding:13px 22px;margin-bottom:20px;}
-#ann-print-scope .ann-info-row{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:8px;font-size:10.5pt;}
-#ann-print-scope .ann-info-label{color:#5D6B99;font-weight:500;}
-#ann-print-scope .ann-info-val{font-family:'Noto Sans KR',sans-serif;color:#231F20;font-weight:700;font-size:11pt;letter-spacing:-0.3px;}
-#ann-print-scope .ann-info-name{font-family:'Noto Sans KR',sans-serif;font-size:12pt;font-weight:900;letter-spacing:-0.3px;}
-#ann-print-scope .ann-info-divider{color:#B8BDD5;font-weight:300;margin:0 4px;}
-#ann-print-scope .ann-main{background:linear-gradient(135deg, #C7ECEE 0%, #D5DAED 100%);border-radius:14px;padding:20px 24px;margin-bottom:24px;position:relative;}
-#ann-print-scope .ann-main-label{display:inline-block;background:#00B2BE;color:#fff;font-size:10pt;font-weight:700;padding:3px 12px;border-radius:12px;margin-bottom:14px;letter-spacing:0.5px;}
-#ann-print-scope .ann-datetime{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:12px;padding-bottom:12px;border-bottom:1.5px dashed #C9D0E5;}
-#ann-print-scope .ann-datetime-text{font-family:'Noto Sans KR',sans-serif;font-weight:700;font-size:18pt;color:#231F20;letter-spacing:-1.2px;line-height:1.2;}
-#ann-print-scope .ann-duration{font-size:10.5pt;color:#6B7280;font-weight:500;}
-#ann-print-scope .ann-place-line{font-size:11.5pt;color:#231F20;line-height:1.7;}
-#ann-print-scope .ann-place-line b{color:#7E8CC6;font-weight:700;}
-#ann-print-scope .ann-body{padding:4px 4px 0;}
-#ann-print-scope .ann-p{font-size:11pt;color:#231F20;line-height:1.75;margin-bottom:12px;}
-#ann-print-scope .ann-p:last-child{margin-bottom:0;}
-#ann-print-scope .ann-p b{color:#7E8CC6;font-weight:700;}
-#ann-print-scope .ann-status-card{background:#F0F7F7;border-radius:12px;padding:14px 18px;margin-bottom:20px;border:1px solid rgba(0,178,190,.1);}
-#ann-print-scope .ann-status-title{font-size:10pt;font-weight:700;color:#7E8CC6;margin-bottom:8px;letter-spacing:-0.3px;}
-#ann-print-scope .ann-status-row{display:flex;align-items:center;gap:10px;font-size:10.5pt;line-height:1.7;flex-wrap:wrap;}
-#ann-print-scope .ann-status-label{color:#231F20;font-weight:500;min-width:78px;}
-#ann-print-scope .ann-status-badge{display:inline-block;padding:2px 10px;border-radius:10px;font-size:9.5pt;font-weight:700;letter-spacing:-0.3px;}
-#ann-print-scope .ann-status-ok{background:#D5F1F3;color:#007A83;}
-#ann-print-scope .ann-status-no{background:#F9DEDE;color:#C64545;}
-#ann-print-scope .ann-status-note{font-size:9.5pt;color:#8A4A4A;font-weight:500;}
-#ann-print-scope .ann-brand{position:absolute;bottom:14mm;right:20mm;}
-#ann-print-scope .ann-brand img{height:10mm;width:auto;display:block;opacity:.85;}
-`;
-  wrapper.appendChild(styleEl);
-
-  // 안내문 HTML 삽입
-  const annHTML = buildAnnouncementHTML(stu, asgn);
-  const contentDiv = document.createElement('div');
-  contentDiv.innerHTML = annHTML;
-  wrapper.appendChild(contentDiv);
-
-  document.body.appendChild(wrapper);
-
-  // 폰트/이미지 로드 대기
-  setTimeout(() => {
-    const target = wrapper.querySelector('.ann-page');
-    if(!target){
-      document.body.removeChild(wrapper);
-      alert('PDF 생성 실패: 안내문 요소 없음');
-      return;
-    }
-    window.html2pdf()
-      .from(target)
-      .set({
-        filename: filename,
-        margin: 0,
-        image: { type: 'jpeg', quality: 0.97 },
-        html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', logging: false },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['avoid-all'] }
-      })
-      .save()
-      .then(() => {
-        document.body.removeChild(wrapper);
-        showToast(`✓ ${filename}`);
-      })
-      .catch(err => {
-        document.body.removeChild(wrapper);
-        alert('PDF 생성 실패: ' + err.message);
-      });
-  }, 600);
+  _renderAnnouncementsInWindow([{stu, asgn}], {
+    autoprint: false,
+    autoDownload: true,
+    downloadFilename: filename,
+    title: `안내문 - ${stu.name}`
+  });
 }
 
 
