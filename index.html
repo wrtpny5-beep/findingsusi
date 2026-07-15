@@ -262,6 +262,15 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
 .date-group table tr.s-conflict td:first-child{border-left:3px solid #b00020;}
 .date-group table tr.s-conflict td{background:#fff5f5;}
 .date-group table tr.s-unknown td:first-child{border-left:3px solid #bbb;}
+
+/* 드래그앤드롭 */
+.draggable-student{cursor:grab;transition:opacity .15s;}
+.draggable-student:active{cursor:grabbing;}
+.dragging{opacity:0.4;}
+.drop-target-hover{background:#D5F1F3 !important;outline:2px dashed #00B2BE;outline-offset:-2px;}
+.drop-target-disabled{opacity:0.35;pointer-events:none;}
+.date-group table tr[data-drop-tid]{transition:background .15s;}
+.time-slot-row[data-drop-tid]{transition:all .15s;}
 .date-status{display:inline-flex;gap:8px;align-items:center;margin-left:8px;font-size:12px;font-family:'DM Mono',monospace;font-weight:600;}
 .date-status .st-ok{color:#2e7d32;}
 .date-status .st-conflict{color:#b00020;}
@@ -1660,9 +1669,10 @@ function renderSlots(){
           <div class="time-slot-list" id="tlist_${db.id}">${db.times.map(t=>{
             const ak=Object.keys(assignments).find(k=>assignments[k].timeId===t.id);
             const as=ak!==undefined?targetList[parseInt(ak)]:null;
-            return `<div class="time-slot-row">
+            const asIdx = ak!==undefined ? parseInt(ak) : null;
+            return `<div class="time-slot-row" data-drop-tid="${t.id}" data-drop-did="${db.id}" data-drop-cid="${c.id}" data-drop-date="${db.date}" ondragover="_dndOver(event)" ondragleave="_dndLeave(event)" ondrop="_dndDrop(event,'${c.id}','${db.id}','${t.id}','${db.date}')">
               <span class="font-mono" style="font-size:12px;min-width:108px;">${t.startTime} ~ ${t.endTime}</span>
-              ${as?`<span class="slot-assigned filled">✓ <span class="mm-badge">${as.maymac}</span> ${as.name}(${as.sid})</span>`:'<span class="slot-assigned">미배정</span>'}
+              ${as?`<span class="slot-assigned filled draggable-student" draggable="true" ondragstart="_dndStart(event,${asIdx},'${db.date}')" ondragend="_dndEnd(event)" title="드래그해서 다른 슬롯으로 이동/swap">✓ <span class="mm-badge">${as.maymac}</span> ${as.name}(${as.sid})</span>`:'<span class="slot-assigned">미배정</span>'}
               <button class="btn btn-danger btn-sm" onclick="removeTime('${c.id}','${db.id}','${t.id}')">✕</button>
             </div>`;
           }).join('')}</div>
@@ -1946,6 +1956,101 @@ function _runAssign(){
 // TAB 4: 결과 출력 — 배정일별 그룹 UI
 // ============================================================
 
+// ============================================================
+// 드래그앤드롭 — 학생 배정 이동/swap (결과탭 · 담당자 등록탭 공용)
+// ============================================================
+let _dndDrag = null; // {idx, date}
+
+function _dndStart(ev, idx, date){
+  _dndDrag = {idx, date};
+  ev.dataTransfer.effectAllowed = 'move';
+  try { ev.dataTransfer.setData('text/plain', String(idx)); } catch(e){}
+  ev.currentTarget.classList.add('dragging');
+  // 다른 날짜 드롭 타겟은 비활성 표시
+  document.querySelectorAll('[data-drop-date]').forEach(el => {
+    if(el.dataset.dropDate !== date) el.classList.add('drop-target-disabled');
+  });
+}
+
+function _dndEnd(ev){
+  ev.currentTarget.classList.remove('dragging');
+  document.querySelectorAll('.drop-target-disabled, .drop-target-hover').forEach(el => {
+    el.classList.remove('drop-target-disabled', 'drop-target-hover');
+  });
+  _dndDrag = null;
+}
+
+function _dndOver(ev){
+  if(!_dndDrag) return;
+  const target = ev.currentTarget;
+  if(target.dataset.dropDate !== _dndDrag.date) return;
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = 'move';
+  target.classList.add('drop-target-hover');
+}
+
+function _dndLeave(ev){
+  ev.currentTarget.classList.remove('drop-target-hover');
+}
+
+function _dndDrop(ev, cid, did, tid, date){
+  ev.preventDefault();
+  ev.stopPropagation();
+  ev.currentTarget.classList.remove('drop-target-hover');
+  const drag = _dndDrag;
+  _dndDrag = null;
+  if(!drag) return;
+  if(date !== drag.date){ showToast('같은 날짜에서만 이동 가능'); return; }
+  moveOrSwapAssignment(drag.idx, {cid, did, tid});
+}
+
+// fromIdx 학생을 목적 슬롯으로 이동. 목적 슬롯에 학생이 있으면 swap.
+function moveOrSwapAssignment(fromIdx, toSlot){
+  const from = assignments[fromIdx];
+  if(!from) return;
+  // 목적 슬롯 정보 조회
+  const c = consultants.find(x => x.id === toSlot.cid);
+  const d = c && (c.dates||[]).find(x => x.id === toSlot.did);
+  const t = d && (d.times||[]).find(x => x.id === toSlot.tid);
+  if(!c || !d || !t){ showToast('슬롯 정보를 찾을 수 없음'); return; }
+  // 같은 슬롯이면 무시
+  if(from.timeId === toSlot.tid) return;
+  // 목적 슬롯에 이미 학생이 있는지
+  let toIdx = null;
+  for(const k in assignments){
+    if(assignments[k].timeId === toSlot.tid){ toIdx = parseInt(k); break; }
+  }
+  const fromName = targetList[fromIdx] ? targetList[fromIdx].name : '학생';
+  if(toIdx === null){
+    // 빈 슬롯 → 이동
+    assignments[fromIdx] = {
+      consultantId: c.id, consultantName: c.name,
+      dateId: d.id, timeId: t.id,
+      date: d.date, startTime: t.startTime, endTime: t.endTime
+    };
+    showToast(`${fromName} → ${c.name} ${t.startTime}`);
+  } else {
+    // swap
+    const fromSnapshot = {
+      consultantId: from.consultantId, consultantName: from.consultantName,
+      dateId: from.dateId, timeId: from.timeId,
+      date: from.date, startTime: from.startTime, endTime: from.endTime
+    };
+    assignments[fromIdx] = {
+      consultantId: c.id, consultantName: c.name,
+      dateId: d.id, timeId: t.id,
+      date: d.date, startTime: t.startTime, endTime: t.endTime
+    };
+    assignments[toIdx] = fromSnapshot;
+    const toName = targetList[toIdx] ? targetList[toIdx].name : '학생';
+    showToast(`${fromName} ↔ ${toName} swap`);
+  }
+  save();
+  renderSlots();
+  renderResult();
+  if(typeof updateConflictBanner === 'function') updateConflictBanner();
+}
+
 // 7/27부터 시간표 변경에 따른 일괄 시프트
 // 옛 상담 시간 → 새 상담 시간 매핑 (10개, 11번은 신규라 매핑 없음)
 const SHIFT_CUTOFF_DATE = '2026-07-27';
@@ -2126,7 +2231,7 @@ function renderResult(){
             <col style="width:108px"><col style="width:110px"><col style="width:70px"><col style="width:80px"><col style="width:80px"><col><col style="width:240px">
           </colgroup>
           <thead><tr><th>시간</th><th>담당자</th><th>마이맥</th><th>생활반</th><th>학번</th><th>이름</th><th style="text-align:center;">동작</th></tr></thead>
-          <tbody>${groupRows.map(r=>`<tr class="s-${r.status}">
+          <tbody>${groupRows.map(r=>`<tr class="s-${r.status} draggable-student" draggable="true" data-drop-tid="${r.a.timeId}" data-drop-did="${r.a.dateId}" data-drop-cid="${r.a.consultantId}" data-drop-date="${r.a.date}" ondragstart="_dndStart(event,${r.idx},'${r.a.date}')" ondragend="_dndEnd(event)" ondragover="_dndOver(event)" ondragleave="_dndLeave(event)" ondrop="_dndDrop(event,'${r.a.consultantId}','${r.a.dateId}','${r.a.timeId}','${r.a.date}')" title="드래그해서 다른 슬롯으로 이동/swap">
             <td class="font-mono">${r.a.startTime}~${r.a.endTime}</td>
             <td>${r.a.consultantName}</td>
             <td><span class="mm-badge">${r.s.maymac}</span></td>
