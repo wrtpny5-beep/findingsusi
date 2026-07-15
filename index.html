@@ -590,6 +590,7 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
       <option value="conflict">⚠ 시간충돌만</option>
     </select>
     <button class="btn btn-ghost btn-sm" onclick="exportList()">🩷 배정 목록 엑셀</button>
+    <button class="btn btn-ghost btn-sm" onclick="shiftScheduleForNewTimetable()" title="7/27부터 새 학원 시간표에 맞춰 상담 슬롯을 일괄 이동 (배정 유지)">🔄 시간표 shift</button>
     <button class="btn btn-ghost btn-sm" onclick="previewSampleAnnouncement()" style="margin-left:auto;">📨 안내문 미리보기</button>
     <button class="btn btn-ghost btn-sm" onclick="previewSampleForm()">📄 양식 디자인 미리보기</button>
   </div>
@@ -1944,6 +1945,101 @@ function _runAssign(){
 // ============================================================
 // TAB 4: 결과 출력 — 배정일별 그룹 UI
 // ============================================================
+
+// 7/27부터 시간표 변경에 따른 일괄 시프트
+// 옛 상담 시간 → 새 상담 시간 매핑 (10개, 11번은 신규라 매핑 없음)
+const SHIFT_CUTOFF_DATE = '2026-07-27';
+const TIME_SHIFT_MAP = {
+  '09:00~09:40': ['08:40','09:30'],
+  '10:00~10:40': ['09:30','10:20'],
+  '10:40~11:20': ['10:20','11:10'],
+  '11:20~12:00': ['11:10','12:00'],
+  '13:30~14:10': ['13:30','14:20'],
+  '14:10~14:50': ['14:20','15:10'],
+  '15:00~15:40': ['15:20','16:10'],
+  '15:40~16:20': ['16:10','17:00'],
+  '16:20~17:00': ['17:10','18:00'],
+  '17:10~17:50': ['19:10','20:00'],
+};
+
+function shiftScheduleForNewTimetable(){
+  let candidateSlots = 0;
+  let matchable = 0;
+  let unmatchable = [];
+  for(const c of consultants){
+    for(const d of (c.dates||[])){
+      if(!d.date || d.date < SHIFT_CUTOFF_DATE) continue;
+      for(const t of (d.times||[])){
+        candidateSlots++;
+        const key = `${t.startTime}~${t.endTime}`;
+        if(TIME_SHIFT_MAP[key]) matchable++;
+        else unmatchable.push(`${c.name} ${d.date} ${key}`);
+      }
+    }
+  }
+  if(candidateSlots === 0){
+    alert(`${SHIFT_CUTOFF_DATE} 이후 슬롯이 없습니다.`);
+    return;
+  }
+  const unmatchPreview = unmatchable.slice(0, 5).join('\n  · ');
+  const unmatchMore = unmatchable.length > 5 ? `\n  · ...외 ${unmatchable.length - 5}개` : '';
+  const msg = `${SHIFT_CUTOFF_DATE} 이후 슬롯 ${candidateSlots}개 중 ${matchable}개를 새 시간표로 이동합니다.
+
+【 매핑 】
+  09:00~09:40 → 08:40~09:30
+  10:00~10:40 → 09:30~10:20
+  10:40~11:20 → 10:20~11:10
+  11:20~12:00 → 11:10~12:00
+  13:30~14:10 → 13:30~14:20
+  14:10~14:50 → 14:20~15:10
+  15:00~15:40 → 15:20~16:10
+  15:40~16:20 → 16:10~17:00
+  16:20~17:00 → 17:10~18:00
+  17:10~17:50 → 19:10~20:00
+${unmatchable.length ? `\n【 매핑 안 됨 (그대로 유지) ${unmatchable.length}개 】\n  · ${unmatchPreview}${unmatchMore}` : ''}
+
+▶ 배정된 학생은 유지되며, 새 시간표 기준으로 시간충돌 자동 재검증됩니다.
+
+실행할까요?`;
+  if(!confirm(msg)) return;
+  let shifted = 0;
+  let asgnUpdated = 0;
+  for(const c of consultants){
+    for(const d of (c.dates||[])){
+      if(!d.date || d.date < SHIFT_CUTOFF_DATE) continue;
+      for(const t of (d.times||[])){
+        const key = `${t.startTime}~${t.endTime}`;
+        const map = TIME_SHIFT_MAP[key];
+        if(!map) continue;
+        const [newSt, newEt] = map;
+        t.startTime = newSt;
+        t.endTime = newEt;
+        shifted++;
+        for(const idx in assignments){
+          if(assignments[idx].timeId === t.id){
+            assignments[idx].startTime = newSt;
+            assignments[idx].endTime = newEt;
+            asgnUpdated++;
+          }
+        }
+      }
+    }
+  }
+  save();
+  renderSlots();
+  renderResult();
+  if(typeof updateConflictBanner === 'function') updateConflictBanner();
+  let newConflicts = 0;
+  for(const idx in assignments){
+    const a = assignments[idx];
+    const s = targetList[parseInt(idx)];
+    if(!s || !s.busy || !s.busy.length) continue;
+    if(a.date < SHIFT_CUTOFF_DATE) continue;
+    if(typeof isConflict === 'function' && isConflict(s.busy, a.date, a.startTime, a.endTime)) newConflicts++;
+  }
+  alert(`✓ 시프트 완료\n\n  · 이동된 슬롯: ${shifted}개\n  · 갱신된 배정: ${asgnUpdated}명\n  · 매핑 안 된 슬롯: ${unmatchable.length}개 (그대로 유지)\n  · ${SHIFT_CUTOFF_DATE} 이후 시간충돌: ${newConflicts}명${newConflicts?' → 결과탭에서 ⚠ 표시된 학생 확인해 주세요':''}`);
+}
+
 function renderResult(){
   const wrap=document.getElementById('resultWrap');
   const doneN=Object.keys(assignments).length;
