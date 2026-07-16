@@ -262,6 +262,10 @@ tr.added td:first-child{border-left:3px solid var(--rose);}
 .date-group table tr.s-conflict td:first-child{border-left:3px solid #b00020;}
 .date-group table tr.s-conflict td{background:#fff5f5;}
 .date-group table tr.s-unknown td:first-child{border-left:3px solid #bbb;}
+.date-group table tr.s-empty td{background:#FAFBFC;color:var(--muted);font-size:12px;}
+.date-group table tr.s-empty td:first-child{border-left:3px solid #E5E7EB;}
+.date-group table tr.s-empty .empty-slot-cell{font-style:italic;letter-spacing:-0.3px;}
+.date-group table tr.s-empty:hover td{background:#F3F4F6;}
 
 /* 드래그앤드롭 */
 .draggable-student{cursor:grab;transition:opacity .15s;}
@@ -2172,6 +2176,12 @@ function renderResult(){
   const unassigned=rows.filter(r=>!r.a);
   const byDate={};
   assigned.forEach(r=>{(byDate[r.a.date]=byDate[r.a.date]||[]).push(r);});
+  // 배정 없이 슬롯만 있는 날짜도 포함 (빈 슬롯 표시용)
+  for(const c of consultants){
+    for(const d of (c.dates||[])){
+      if(d.date && (d.times||[]).length && !byDate[d.date]) byDate[d.date] = [];
+    }
+  }
   const sortedDates=Object.keys(byDate).sort();
 
   // 학생당 시간충돌 검증 상태 분류
@@ -2205,13 +2215,56 @@ function renderResult(){
     const unknownN = groupRows.filter(r=>r.status==='unknown').length;
     const isLocked = lockedDates.includes(date);
     const isNotified = notifiedDates.includes(date);
+    
+    // 이 날짜의 모든 슬롯 수집 (배정+빈 슬롯 함께 표시)
+    // groupRows(배정된 학생)를 timeId 기준 map으로
+    const assignedByTid = {};
+    groupRows.forEach(r=>{ assignedByTid[r.a.timeId] = r; });
+    // 그 날짜의 모든 슬롯 (담당자별로)
+    const allSlotsForDate = [];
+    for(const c of consultants){
+      for(const d of (c.dates||[])){
+        if(d.date !== date) continue;
+        for(const t of (d.times||[])){
+          allSlotsForDate.push({
+            cid: c.id, cname: c.name, did: d.id, tid: t.id,
+            startTime: t.startTime, endTime: t.endTime,
+            row: assignedByTid[t.id] || null
+          });
+        }
+      }
+    }
+    // 시간 순 정렬 (같은 시간이면 담당자명 순)
+    allSlotsForDate.sort((a,b)=>{
+      const c = a.startTime.localeCompare(b.startTime);
+      return c!==0 ? c : a.cname.localeCompare(b.cname);
+    });
+    // 필터 상태 반영: fStatus에 따라 빈 슬롯도 숨겨야 하는지 결정
+    const fs = document.getElementById('fStatus').value;
+    // 필터가 'none'(미배정만) 또는 ''(전체) 아니면 빈 슬롯 숨김
+    const showEmpty = (fs === '' || fs === 'none');
+    // 담당자 필터
+    const fc = document.getElementById('fConsultant').value;
+    const slotsToRender = allSlotsForDate.filter(s => {
+      if(fc && s.cid !== fc) return false;
+      if(!s.row){
+        // 빈 슬롯
+        if(!showEmpty) return false;
+        // conflict 필터일 때는 빈 슬롯 숨김
+        if(fs === 'conflict' || fs === 'done') return false;
+        return true;
+      }
+      // 배정된 슬롯: 이미 rows 필터에서 걸러진 상태로 groupRows에 있으므로 통과
+      return groupRows.includes(s.row);
+    });
+    
     html+=`
       <div class="date-group${isLocked?' date-locked':''}">
         <div class="date-group-header">
           <div class="date-info">
             <span class="date-main">${date}</span>
             <span class="date-wd">(${getWd(date)})</span>
-            <span class="date-count">${groupRows.length}명</span>
+            <span class="date-count">${groupRows.length}명 · ${allSlotsForDate.length}슬롯</span>
             ${isLocked?'<span class="lock-badge" title="자동 배정 시 보호됨">🔒 고정됨</span>':''}
             <span class="date-status">
               <span class="st-ok" title="시간충돌 없음 (시간표 검증됨)">✓ ${okN}</span>
@@ -2231,20 +2284,33 @@ function renderResult(){
             <col style="width:108px"><col style="width:110px"><col style="width:70px"><col style="width:80px"><col style="width:80px"><col><col style="width:240px">
           </colgroup>
           <thead><tr><th>시간</th><th>담당자</th><th>마이맥</th><th>생활반</th><th>학번</th><th>이름</th><th style="text-align:center;">동작</th></tr></thead>
-          <tbody>${groupRows.map(r=>`<tr class="s-${r.status} draggable-student" draggable="true" data-drop-tid="${r.a.timeId}" data-drop-did="${r.a.dateId}" data-drop-cid="${r.a.consultantId}" data-drop-date="${r.a.date}" ondragstart="_dndStart(event,${r.idx},'${r.a.date}')" ondragend="_dndEnd(event)" ondragover="_dndOver(event)" ondragleave="_dndLeave(event)" ondrop="_dndDrop(event,'${r.a.consultantId}','${r.a.dateId}','${r.a.timeId}','${r.a.date}')" title="드래그해서 다른 슬롯으로 이동/swap">
-            <td class="font-mono">${r.a.startTime}~${r.a.endTime}</td>
-            <td>${r.a.consultantName}</td>
-            <td><span class="mm-badge">${r.s.maymac}</span></td>
-            <td>${r.s.classCode||'-'}</td>
-            <td class="font-mono">${r.s.sid}</td>
-            <td class="cell-name">${r.s.name}${r.s.submitted===false?' <span class="pill-mini-warn">📎 생기부 미제출</span>':''}${hasSurveyResponse(r.s.formData)?'':' <span class="pill-mini-info">📋 설문 미응답</span>'}${r.status==='conflict'?`<div class="conflict-reason">⚠ ${conflictReason(r.s, r.a)}와 겹침</div>`:''}</td>
-            <td style="text-align:center;white-space:nowrap;">
-              <button class="btn-copy-sm" onclick="copyStudent(${r.idx})" title="셀 값 복사">📋</button>
-              <button class="btn-copy-sm" onclick="printAnnouncement(${r.idx})" title="개인 안내문 PDF 다운로드">📨</button>
-              <button class="btn-print" onclick="printForms([${r.idx}])">📄 양식</button>
-              <button class="btn-copy-sm" onclick="reassignSingleStudent(${r.idx})" title="이 학생 빼고 빈자리 메우기" style="border-color:#C0392B;color:#C0392B;">🔄</button>
-            </td>
-          </tr>`).join('')}</tbody>
+          <tbody>${slotsToRender.map(s=>{
+            if(s.row){
+              const r = s.row;
+              return `<tr class="s-${r.status} draggable-student" draggable="true" data-drop-tid="${r.a.timeId}" data-drop-did="${r.a.dateId}" data-drop-cid="${r.a.consultantId}" data-drop-date="${r.a.date}" ondragstart="_dndStart(event,${r.idx},'${r.a.date}')" ondragend="_dndEnd(event)" ondragover="_dndOver(event)" ondragleave="_dndLeave(event)" ondrop="_dndDrop(event,'${r.a.consultantId}','${r.a.dateId}','${r.a.timeId}','${r.a.date}')" title="드래그해서 다른 슬롯으로 이동/swap">
+                <td class="font-mono">${r.a.startTime}~${r.a.endTime}</td>
+                <td>${r.a.consultantName}</td>
+                <td><span class="mm-badge">${r.s.maymac}</span></td>
+                <td>${r.s.classCode||'-'}</td>
+                <td class="font-mono">${r.s.sid}</td>
+                <td class="cell-name">${r.s.name}${r.s.submitted===false?' <span class="pill-mini-warn">📎 생기부 미제출</span>':''}${hasSurveyResponse(r.s.formData)?'':' <span class="pill-mini-info">📋 설문 미응답</span>'}${r.status==='conflict'?`<div class="conflict-reason">⚠ ${conflictReason(r.s, r.a)}와 겹침</div>`:''}</td>
+                <td style="text-align:center;white-space:nowrap;">
+                  <button class="btn-copy-sm" onclick="copyStudent(${r.idx})" title="셀 값 복사">📋</button>
+                  <button class="btn-copy-sm" onclick="printAnnouncement(${r.idx})" title="개인 안내문 PDF 다운로드">📨</button>
+                  <button class="btn-print" onclick="printForms([${r.idx}])">📄 양식</button>
+                  <button class="btn-copy-sm" onclick="reassignSingleStudent(${r.idx})" title="이 학생 빼고 빈자리 메우기" style="border-color:#C0392B;color:#C0392B;">🔄</button>
+                </td>
+              </tr>`;
+            } else {
+              // 빈 슬롯
+              return `<tr class="s-empty" data-drop-tid="${s.tid}" data-drop-did="${s.did}" data-drop-cid="${s.cid}" data-drop-date="${date}" ondragover="_dndOver(event)" ondragleave="_dndLeave(event)" ondrop="_dndDrop(event,'${s.cid}','${s.did}','${s.tid}','${date}')" title="여기로 드래그하면 이동됩니다">
+                <td class="font-mono">${s.startTime}~${s.endTime}</td>
+                <td>${s.cname}</td>
+                <td colspan="4" class="empty-slot-cell">— 빈 슬롯 —</td>
+                <td></td>
+              </tr>`;
+            }
+          }).join('')}</tbody>
         </table>
         <div class="date-lock-bar">
           <button class="lock-star${isLocked?' active':''}" onclick="toggleDateLock('${date}')" title="${isLocked?'고정 해제':'이 날짜 고정 (자동 배정 시 보호됨)'}">${isLocked?'⭐':'☆'}</button>
