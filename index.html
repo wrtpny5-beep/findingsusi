@@ -2075,26 +2075,37 @@ function shiftScheduleForNewTimetable(){
   let candidateSlots = 0;
   let matchable = 0;
   let unmatchable = [];
+  // 20:00~20:50 슬롯을 추가할 대상 (27일 이후에 이미 상담이 세팅된 날짜)
+  const needsEveningSlot = [];  // [{c, d}]
   for(const c of consultants){
     for(const d of (c.dates||[])){
       if(!d.date || d.date < SHIFT_CUTOFF_DATE) continue;
-      for(const t of (d.times||[])){
+      const times = d.times || [];
+      if(times.length === 0) continue;
+      // shift 대상 슬롯 카운트
+      for(const t of times){
         candidateSlots++;
         const key = `${t.startTime}~${t.endTime}`;
         if(TIME_SHIFT_MAP[key]) matchable++;
-        else unmatchable.push(`${c.name} ${d.date} ${key}`);
+        else if(!(t.startTime === '20:00' && t.endTime === '20:50')) unmatchable.push(`${c.name} ${d.date} ${key}`);
       }
+      // 20:00~20:50 슬롯 이미 있는지
+      const hasEvening = times.some(t => t.startTime === '20:00' && t.endTime === '20:50');
+      if(!hasEvening) needsEveningSlot.push({c, d});
     }
   }
-  if(candidateSlots === 0){
+  
+  if(candidateSlots === 0 && needsEveningSlot.length === 0){
     alert(`${SHIFT_CUTOFF_DATE} 이후 슬롯이 없습니다.`);
     return;
   }
+  
   const unmatchPreview = unmatchable.slice(0, 5).join('\n  · ');
   const unmatchMore = unmatchable.length > 5 ? `\n  · ...외 ${unmatchable.length - 5}개` : '';
-  const msg = `${SHIFT_CUTOFF_DATE} 이후 슬롯 ${candidateSlots}개 중 ${matchable}개를 새 시간표로 이동합니다.
-
-【 매핑 】
+  
+  const parts = [];
+  if(matchable > 0){
+    parts.push(`【 시간 매핑 】 ${matchable}개 슬롯 이동
   09:00~09:40 → 08:40~09:30
   10:00~10:40 → 09:30~10:20
   10:40~11:20 → 10:20~11:10
@@ -2104,13 +2115,20 @@ function shiftScheduleForNewTimetable(){
   15:00~15:40 → 15:20~16:10
   15:40~16:20 → 16:10~17:00
   16:20~17:00 → 17:10~18:00
-  17:10~17:50 → 19:10~20:00
-${unmatchable.length ? `\n【 매핑 안 됨 (그대로 유지) ${unmatchable.length}개 】\n  · ${unmatchPreview}${unmatchMore}` : ''}
-
-▶ 배정된 학생은 유지되며, 새 시간표 기준으로 시간충돌 자동 재검증됩니다.
-
-실행할까요?`;
+  17:10~17:50 → 19:10~20:00`);
+  }
+  if(needsEveningSlot.length > 0){
+    parts.push(`【 신규 슬롯 추가 】 ${needsEveningSlot.length}개
+  20:00~20:50 슬롯을 (담당자, 날짜)별로 자동 추가합니다`);
+  }
+  if(unmatchable.length > 0){
+    parts.push(`【 매핑 안 됨 (그대로 유지) ${unmatchable.length}개 】\n  · ${unmatchPreview}${unmatchMore}`);
+  }
+  
+  const msg = parts.join('\n\n') + `\n\n▶ 배정된 학생은 유지되며, 새 시간표 기준으로 시간충돌 자동 재검증됩니다.\n\n실행할까요?`;
+  
   if(!confirm(msg)) return;
+  
   let shifted = 0;
   let asgnUpdated = 0;
   for(const c of consultants){
@@ -2134,10 +2152,19 @@ ${unmatchable.length ? `\n【 매핑 안 됨 (그대로 유지) ${unmatchable.le
       }
     }
   }
+  
+  // 20:00~20:50 신규 슬롯 추가
+  let eveningAdded = 0;
+  for(const {c, d} of needsEveningSlot){
+    d.times.push({id: uuid(), startTime: '20:00', endTime: '20:50'});
+    eveningAdded++;
+  }
+  
   save();
   renderSlots();
   renderResult();
   if(typeof updateConflictBanner === 'function') updateConflictBanner();
+  
   let newConflicts = 0;
   for(const idx in assignments){
     const a = assignments[idx];
@@ -2146,7 +2173,15 @@ ${unmatchable.length ? `\n【 매핑 안 됨 (그대로 유지) ${unmatchable.le
     if(a.date < SHIFT_CUTOFF_DATE) continue;
     if(typeof isConflict === 'function' && isConflict(s.busy, a.date, a.startTime, a.endTime)) newConflicts++;
   }
-  alert(`✓ 시프트 완료\n\n  · 이동된 슬롯: ${shifted}개\n  · 갱신된 배정: ${asgnUpdated}명\n  · 매핑 안 된 슬롯: ${unmatchable.length}개 (그대로 유지)\n  · ${SHIFT_CUTOFF_DATE} 이후 시간충돌: ${newConflicts}명${newConflicts?' → 결과탭에서 ⚠ 표시된 학생 확인해 주세요':''}`);
+  
+  const summary = [
+    shifted > 0 ? `  · 이동된 슬롯: ${shifted}개 (배정 ${asgnUpdated}명 갱신)` : null,
+    eveningAdded > 0 ? `  · 추가된 20:00~20:50 슬롯: ${eveningAdded}개` : null,
+    unmatchable.length > 0 ? `  · 매핑 안 된 슬롯: ${unmatchable.length}개 (그대로 유지)` : null,
+    `  · ${SHIFT_CUTOFF_DATE} 이후 시간충돌: ${newConflicts}명${newConflicts?' → 결과탭 ⚠ 학생 확인':''}`
+  ].filter(Boolean).join('\n');
+  
+  alert(`✓ 완료\n\n${summary}`);
 }
 
 function renderResult(){
