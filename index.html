@@ -1998,27 +1998,21 @@ function _dndStart(ev, idx, date){
   ev.dataTransfer.effectAllowed = 'move';
   try { ev.dataTransfer.setData('text/plain', String(idx)); } catch(e){}
   ev.currentTarget.classList.add('dragging');
-  // 다른 날짜 드롭 타겟은 비활성 표시
-  document.querySelectorAll('[data-drop-date]').forEach(el => {
-    if(el.dataset.dropDate !== date) el.classList.add('drop-target-disabled');
-  });
 }
 
 function _dndEnd(ev){
   ev.currentTarget.classList.remove('dragging');
-  document.querySelectorAll('.drop-target-disabled, .drop-target-hover').forEach(el => {
-    el.classList.remove('drop-target-disabled', 'drop-target-hover');
+  document.querySelectorAll('.drop-target-hover').forEach(el => {
+    el.classList.remove('drop-target-hover');
   });
   _dndDrag = null;
 }
 
 function _dndOver(ev){
   if(!_dndDrag) return;
-  const target = ev.currentTarget;
-  if(target.dataset.dropDate !== _dndDrag.date) return;
   ev.preventDefault();
   ev.dataTransfer.dropEffect = 'move';
-  target.classList.add('drop-target-hover');
+  ev.currentTarget.classList.add('drop-target-hover');
 }
 
 function _dndLeave(ev){
@@ -2032,7 +2026,6 @@ function _dndDrop(ev, cid, did, tid, date){
   const drag = _dndDrag;
   _dndDrag = null;
   if(!drag) return;
-  if(date !== drag.date){ showToast('같은 날짜에서만 이동 가능'); return; }
   moveOrSwapAssignment(drag.idx, {cid, did, tid});
 }
 
