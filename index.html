@@ -100,6 +100,27 @@ tr:hover td{background:var(--bg);}
 .date-block{border:1px solid var(--border);border-radius:9px;margin-bottom:10px;overflow:hidden;}
 .date-block-header{background:var(--periwinkle);background:rgba(212,214,252,.25);padding:9px 13px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);}
 .time-slot-list{padding:7px 13px 3px;display:flex;flex-direction:column;gap:3px;}
+.slot-preset-bar{
+  padding:8px 13px 12px;border-top:1px dashed var(--border);
+  display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:4px;
+}
+.slot-preset-label{
+  font-size:11px;font-weight:600;color:var(--muted);
+  margin-right:4px;letter-spacing:-0.3px;
+}
+.slot-preset-btn{
+  font-family:'DM Mono',monospace;font-size:11px;
+  padding:4px 8px;border-radius:6px;
+  background:#fff;border:1px solid var(--border);color:var(--dark);
+  cursor:pointer;transition:all .12s;
+}
+.slot-preset-btn:hover:not(:disabled){
+  background:var(--teal-light);border-color:var(--teal-dark);color:var(--teal-dark);
+}
+.slot-preset-btn.has{
+  background:#F5F5F5;color:#BBB;border-color:#EEE;cursor:not-allowed;
+  text-decoration:line-through;
+}
 .time-slot-row{display:flex;align-items:center;gap:8px;padding:3px 0;}
 .quick-add-row{display:flex;align-items:center;gap:7px;padding:7px 13px 9px;background:var(--bg);border-top:1px dashed var(--border);}
 .slot-assigned{font-size:13px;color:var(--muted);font-family:'DM Mono',monospace;}
@@ -1680,6 +1701,13 @@ function renderSlots(){
               <button class="btn btn-danger btn-sm" onclick="removeTime('${c.id}','${db.id}','${t.id}')">✕</button>
             </div>`;
           }).join('')}</div>
+          <div class="slot-preset-bar">
+            <span class="slot-preset-label">+ 시간 추가:</span>
+            ${SLOT_PRESETS.map(([s,e])=>{
+              const exists = (db.times||[]).some(t => t.startTime === s && t.endTime === e);
+              return `<button class="slot-preset-btn${exists?' has':''}" ${exists?'disabled':''} onclick="addPresetSlot('${c.id}','${db.id}','${s}','${e}')" title="${exists?'이미 있음':'클릭하여 추가'}">${s}~${e}</button>`;
+            }).join('')}
+          </div>
         </div>`).join('')}
     </div>`;
   }).join('');
@@ -2053,6 +2081,33 @@ function moveOrSwapAssignment(fromIdx, toSlot){
   renderSlots();
   renderResult();
   if(typeof updateConflictBanner === 'function') updateConflictBanner();
+}
+
+// 새 시간표 프리셋 (2026-07-27 이후)
+const SLOT_PRESETS = [
+  ['08:40','09:30'], ['09:30','10:20'], ['10:20','11:10'], ['11:10','12:00'],
+  ['13:30','14:20'], ['14:20','15:10'], ['15:20','16:10'], ['16:10','17:00'],
+  ['17:10','18:00'], ['19:10','20:00'], ['20:00','20:50']
+];
+
+function addPresetSlot(cid, did, startTime, endTime){
+  const c = consultants.find(x => x.id === cid);
+  if(!c) return;
+  const d = (c.dates||[]).find(x => x.id === did);
+  if(!d) return;
+  // 중복 확인
+  if((d.times||[]).some(t => t.startTime === startTime && t.endTime === endTime)){
+    showToast(`이미 ${startTime}~${endTime} 슬롯이 있습니다`);
+    return;
+  }
+  d.times.push({id: uuid(), startTime, endTime});
+  // 시간 순 정렬
+  d.times.sort((a,b) => a.startTime.localeCompare(b.startTime));
+  save();
+  renderSlots();
+  renderResult();
+  if(typeof updateConflictBanner === 'function') updateConflictBanner();
+  showToast(`✓ ${c.name} ${d.date} ${startTime}~${endTime} 추가됨`);
 }
 
 // 7/27부터 시간표 변경에 따른 일괄 시프트
