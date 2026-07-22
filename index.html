@@ -2740,7 +2740,7 @@ function printAnswers(){
         <span><b>논술:</b> ${_esc(fd.essayKind||'-')}</span>
       </div>
       <div class="ttl">📋 ${py}학년도 작년 결과</div>
-      ${pastFilled.length ? `<table><thead><tr><th>차수</th><th>학교</th><th>학과</th><th>구분</th><th>전형명</th><th>내신</th><th>지원형태</th><th>1단계</th><th>최종</th><th>예비</th></tr></thead><tbody>${pastFilled.map(p => `<tr><td>${p._idx}차</td>${PAST_FIELDS.map(f => `<td>${_esc(p[f]||'')}</td>`).join('')}</tr>`).join('')}</tbody></table>` : `<div class="nd">작성 내용 없음</div>`}
+      ${pastFilled.length ? `<table><thead><tr><th>차수</th><th>학교</th><th>학과</th><th>구분</th><th>전형명</th><th>지원형태</th><th>1단계</th><th>최종</th><th>예비</th></tr></thead><tbody>${pastFilled.map(p => `<tr><td>${p._idx}차</td>${PAST_FIELDS.filter(f => f !== '적용내신').map(f => `<td>${_esc(p[f]||'')}</td>`).join('')}</tr>`).join('')}</tbody></table>` : `<div class="nd">작성 내용 없음</div>`}
       <div class="ttl">🎯 ${ply}학년도 올해 희망</div>
       ${planFilled.length ? `<table><thead><tr><th>순위</th><th>학교</th><th>학과</th><th>구분</th><th>전형명</th></tr></thead><tbody>${planFilled.map(p => `<tr><td>${p._idx}순위</td>${PLAN_FIELDS.map(f => `<td>${_esc(p[f]||'')}</td>`).join('')}</tr>`).join('')}</tbody></table>` : `<div class="nd">작성 내용 없음</div>`}
     </div>`;
