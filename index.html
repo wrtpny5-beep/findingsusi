@@ -3323,12 +3323,6 @@ function buildAnnouncementHTML(stu, asgn){
     <div class="ann-status-card">
       <div class="ann-status-title">📋 상담 준비 상태</div>
       <div class="ann-status-row">
-        <span class="ann-status-label">생기부 제출</span>
-        ${isSubmitted
-          ? '<span class="ann-status-badge ann-status-ok">✓ 제출 완료</span>'
-          : '<span class="ann-status-badge ann-status-no">✗ 미제출</span><span class="ann-status-note">→ 상담 전에 반드시 제출해 주세요</span>'}
-      </div>
-      <div class="ann-status-row">
         <span class="ann-status-label">수시 희망 설문</span>
         ${hasSurvey
           ? '<span class="ann-status-badge ann-status-ok">✓ 응답 완료</span>'
