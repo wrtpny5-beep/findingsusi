@@ -827,8 +827,8 @@ const QUETTA_LOGO = new URL('quetta_logo.png', location.href).href;
 // 설문에 실제 응답이 있는지 확인 (빈 formData는 미응답으로 취급)
 function hasSurveyResponse(fd){
   if(!fd) return false;
-  // 단일값 하나라도 있으면 응답
-  if(fd.apply || fd.type || fd.needCons || fd.essayKind || fd.hs || fd.humSci || fd.curCollege) return true;
+  // 수시 응답에 해당하는 필드만 체크 (hs/humSci/curCollege는 학생 기본 정보라 제외)
+  if(fd.apply || fd.type || fd.needCons || fd.essayKind) return true;
   // past/plan 배열에 실제 값 있으면 응답
   if(Array.isArray(fd.past) && fd.past.some(p => p && Object.values(p).some(v => v))) return true;
   if(Array.isArray(fd.plan) && fd.plan.some(p => p && Object.values(p).some(v => v))) return true;
